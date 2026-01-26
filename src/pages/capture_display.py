@@ -21,6 +21,7 @@ class CaptureDisplayPage(QWidget):
     """
 
     photo_saved = pyqtSignal(str)  # Signal emitted when photo is saved
+    retake_requested = pyqtSignal()  # Signal emitted when retake is requested
 
     def __init__(self, frame_path: str, output_dir: str = "project_files/captured_images"):
         """Initialize the CaptureDisplayPage.
@@ -38,7 +39,7 @@ class CaptureDisplayPage(QWidget):
         # Camera and photo state
         self.camera_handler = None
         self.captured_photo = None
-        self.composed_photo = None
+        self.final_image = None
 
         # Timer for camera feed
         self.feed_timer = QTimer()
@@ -74,7 +75,7 @@ class CaptureDisplayPage(QWidget):
         self.setLayout(layout)
 
         # Apply FOFOBOOTH styling
-        self.apply_fofoboth_style()
+        self.apply_stylesheet()
 
     def create_capture_widget(self) -> QWidget:
         """Create the capture mode widget with camera feed and CAPTURE button.
@@ -88,7 +89,7 @@ class CaptureDisplayPage(QWidget):
         layout.setSpacing(20)
 
         # Title
-        title = QLabel("CAPTURE YOUR PHOTO")
+        title = QLabel("PHOTO TIME!")
         title.setAlignment(Qt.AlignCenter)
         title.setStyleSheet("""
             QLabel {
@@ -115,7 +116,7 @@ class CaptureDisplayPage(QWidget):
         layout.addWidget(self.camera_label)
 
         # Capture button
-        self.capture_button = QPushButton("CAPTURE")
+        self.capture_button = QPushButton("📷 CAPTURE")
         self.capture_button.setFixedHeight(60)
         self.capture_button.setCursor(Qt.PointingHandCursor)
         self.capture_button.clicked.connect(self.capture_photo)
@@ -136,7 +137,7 @@ class CaptureDisplayPage(QWidget):
         layout.setSpacing(20)
 
         # Title
-        title = QLabel("YOUR PHOTO")
+        title = QLabel("YOUR PHOTO!")
         title.setAlignment(Qt.AlignCenter)
         title.setStyleSheet("""
             QLabel {
@@ -166,14 +167,14 @@ class CaptureDisplayPage(QWidget):
         button_layout.setSpacing(20)
 
         # Retake button
-        self.retake_button = QPushButton("RETAKE")
+        self.retake_button = QPushButton("↺ RETAKE")
         self.retake_button.setFixedHeight(60)
         self.retake_button.setCursor(Qt.PointingHandCursor)
-        self.retake_button.clicked.connect(self.retake_photo)
+        self.retake_button.clicked.connect(lambda: (self.retake_photo(), self.retake_requested.emit()))
         button_layout.addWidget(self.retake_button)
 
         # Save button
-        self.save_button = QPushButton("SAVE")
+        self.save_button = QPushButton("💾 SAVE")
         self.save_button.setFixedHeight(60)
         self.save_button.setCursor(Qt.PointingHandCursor)
         self.save_button.clicked.connect(self.save_photo)
@@ -238,7 +239,7 @@ class CaptureDisplayPage(QWidget):
             self.captured_photo = self.camera_handler.capture_photo()
 
             # Apply frame overlay
-            self.composed_photo = apply_frame(self.captured_photo, self.frame_path)
+            self.final_image = apply_frame(self.captured_photo, self.frame_path)
 
             # Display result
             self.display_result()
@@ -255,10 +256,10 @@ class CaptureDisplayPage(QWidget):
 
         Converts PIL Image to QPixmap and scales to fit label.
         """
-        if self.composed_photo:
+        if self.final_image:
             # Convert PIL Image to QPixmap
             from PIL.ImageQt import ImageQt
-            qt_image = ImageQt(self.composed_photo)
+            qt_image = ImageQt(self.final_image)
             pixmap = QPixmap.fromImage(qt_image)
 
             # Scale to fit label
@@ -277,7 +278,7 @@ class CaptureDisplayPage(QWidget):
         """
         # Clear current photo
         self.captured_photo = None
-        self.composed_photo = None
+        self.final_image = None
         self.photo_label.clear()
 
         # Switch to capture mode
@@ -289,21 +290,21 @@ class CaptureDisplayPage(QWidget):
     def save_photo(self):
         """Save the composed photo to disk with timestamp.
 
-        Photo is saved to output_dir with filename: photo_YYYYMMDD_HHMMSS.png
+        Photo is saved to output_dir with filename: photostrip_YYYYMMDD_HHMMSS.png
         Emits photo_saved signal with file path.
         """
-        if not self.composed_photo:
+        if not self.final_image:
             QMessageBox.warning(self, "Error", "No photo to save")
             return
 
         try:
             # Generate filename with timestamp
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"photo_{timestamp}.png"
+            filename = f"photostrip_{timestamp}.png"
             filepath = self.output_dir / filename
 
             # Save photo
-            self.composed_photo.save(str(filepath))
+            self.final_image.save(str(filepath))
 
             # Show success message
             QMessageBox.information(
@@ -334,7 +335,7 @@ class CaptureDisplayPage(QWidget):
             self.camera_handler.release()
             self.camera_handler = None
 
-    def apply_fofoboth_style(self):
+    def apply_stylesheet(self):
         """Apply FOFOBOOTH-inspired styling to buttons."""
         button_style = """
             QPushButton {
