@@ -44,12 +44,25 @@ class FrameCard(QFrame):
         # Load and scale image
         if os.path.exists(frame_path):
             pixmap = QPixmap(frame_path)
-            scaled_pixmap = pixmap.scaled(
-                180, 180,
-                Qt.KeepAspectRatio,
-                Qt.SmoothTransformation
-            )
-            self.thumbnail.setPixmap(scaled_pixmap)
+            if not pixmap.isNull():
+                scaled_pixmap = pixmap.scaled(
+                    180, 180,
+                    Qt.KeepAspectRatio,
+                    Qt.SmoothTransformation
+                )
+                self.thumbnail.setPixmap(scaled_pixmap)
+            else:
+                # Show placeholder text for corrupted image
+                self.thumbnail.setText("⚠️")
+                self.thumbnail.setStyleSheet("""
+                    QLabel {
+                        border: 3px solid #444444;
+                        border-radius: 8px;
+                        background-color: #222222;
+                        color: #FFC0CB;
+                        font-size: 48px;
+                    }
+                """)
 
         # Frame name
         self.name_label = QLabel(frame_name.replace('_', ' ').title())
@@ -135,14 +148,17 @@ class FrameSelectionPage(QWidget):
         """Load frame images from the frames directory."""
         frames_path = Path(self.frames_dir)
 
-        if frames_path.exists():
-            # Support .png, .jpg, .jpeg
-            for ext in ['*.png', '*.jpg', '*.jpeg']:
-                for frame_file in frames_path.glob(ext):
-                    self.frames.append((str(frame_file), frame_file.stem))
+        # Create directory if it doesn't exist
+        if not frames_path.exists():
+            frames_path.mkdir(parents=True, exist_ok=True)
 
-            # Sort alphabetically by name
-            self.frames.sort(key=lambda x: x[1])
+        # Support .png, .jpg, .jpeg
+        for ext in ['*.png', '*.jpg', '*.jpeg']:
+            for frame_file in frames_path.glob(ext):
+                self.frames.append((str(frame_file), frame_file.stem))
+
+        # Sort alphabetically by name
+        self.frames.sort(key=lambda x: x[1])
 
     def _setup_ui(self):
         """Set up the user interface."""
@@ -211,7 +227,8 @@ class FrameSelectionPage(QWidget):
 
         # Add spacer to center grid if fewer items
         if len(self.frames) > 0:
-            grid.setRowStretch(len(self.frames) // cols + 1, 1)
+            last_row = (len(self.frames) - 1) // cols
+            grid.setRowStretch(last_row + 1, 1)
 
         scroll_layout.addLayout(grid)
         scroll_area.setWidget(scroll_widget)
