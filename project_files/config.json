@@ -1,0 +1,11 @@
+{
+  "app_name": "Photobooth",
+  "pin": "1234",
+  "camera": {
+    "device_index": 0,
+    "width": 1280,
+    "height": 720
+  },
+  "frames_dir": "project_files/frames",
+  "output_dir": "project_files/captured_images"
+}

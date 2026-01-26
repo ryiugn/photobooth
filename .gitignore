@@ -1,0 +1,9 @@
+*.pyc
+__pycache__/
+*.py[cod]
+*$py.class
+.env
+.venv
+env/
+venv/
+project_files/captured_images/*.png
