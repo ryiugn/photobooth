@@ -1,5 +1,6 @@
 import numpy as np
 from PIL import Image
+from pathlib import Path
 import cv2
 
 
@@ -13,7 +14,15 @@ def apply_frame(photo: np.ndarray, frame_path: str) -> Image.Image:
 
     Returns:
         Composed PIL Image with frame overlay
+
+    Raises:
+        FileNotFoundError: If frame file doesn't exist
     """
+    # Check if frame file exists
+    frame_file = Path(frame_path)
+    if not frame_file.exists():
+        raise FileNotFoundError(f"Frame file not found: {frame_path}")
+
     # Convert BGR photo to RGB
     rgb_photo = cv2_to_rgb(photo)
 

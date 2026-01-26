@@ -22,3 +22,13 @@ def test_apply_frame_creates_composed_image():
 
     # Verify the image is in RGB mode (not RGBA)
     assert result.mode == "RGB"
+
+
+def test_apply_frame_raises_error_for_missing_frame():
+    """Test that apply_frame raises FileNotFoundError when frame doesn't exist."""
+    # Create a dummy photo
+    photo = np.zeros((480, 640, 3), dtype=np.uint8)
+
+    # Test with a non-existent frame path
+    with pytest.raises(FileNotFoundError, match="Frame file not found"):
+        apply_frame(photo, "project_files/frames/nonexistent_frame.png")
