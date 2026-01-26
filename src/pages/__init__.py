@@ -1,1 +1,1 @@
-# Photobooth Pages
+# Photobooth pages package
