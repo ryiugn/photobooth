@@ -33,6 +33,8 @@ class CaptureDisplayPage(QWidget):
         super().__init__()
 
         self.frame_path = frame_path
+        if not Path(frame_path).exists():
+            raise ValueError(f"Frame file not found: {frame_path}")
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -170,7 +172,7 @@ class CaptureDisplayPage(QWidget):
         self.retake_button = QPushButton("↺ RETAKE")
         self.retake_button.setFixedHeight(60)
         self.retake_button.setCursor(Qt.PointingHandCursor)
-        self.retake_button.clicked.connect(lambda: (self.retake_photo(), self.retake_requested.emit()))
+        self.retake_button.clicked.connect(self._on_retake_clicked)
         button_layout.addWidget(self.retake_button)
 
         # Save button
@@ -287,6 +289,11 @@ class CaptureDisplayPage(QWidget):
         # Restart camera feed
         self.start_camera_feed()
 
+    def _on_retake_clicked(self):
+        """Handle retake button click - emit signal and retake photo."""
+        self.retake_photo()
+        self.retake_requested.emit()
+
     def save_photo(self):
         """Save the composed photo to disk with timestamp.
 
@@ -334,6 +341,11 @@ class CaptureDisplayPage(QWidget):
         if self.camera_handler:
             self.camera_handler.release()
             self.camera_handler = None
+
+    def closeEvent(self, event):
+        """Handle close event - ensure camera is released."""
+        self.cleanup()
+        super().closeEvent(event)
 
     def apply_stylesheet(self):
         """Apply FOFOBOOTH-inspired styling to buttons."""
