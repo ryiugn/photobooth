@@ -128,16 +128,26 @@ pip install -r requirements.txt
 ```bash
 # Copy example env file
 cp .env.example .env
-
-# Edit .env (optional - defaults work for local dev)
 ```
 
-Default `.env` values:
+**Set up your environment variables:**
 ```bash
-PIN_HASH=$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5NU7TiK.MnKHq  # Default: "1234"
-JWT_SECRET=your-secret-key-change-in-production
+# 1. Generate a secure JWT secret (32+ random characters)
+#    Use: https://www.random.org/strings/?num=1&len=32&digits=on&upperalpha=on&loweralpha=on&unique=on
+#    Or Python: python -c "import secrets; print(secrets.token_urlsafe(32))"
+JWT_SECRET=your-secure-random-secret-key-min-32-characters
+
+# 2. For local development, use localhost:
 FRONTEND_URL=http://localhost:5173
+
+# 3. PIN hash below is for "1234" (default PIN - no change needed)
+PIN_HASH=$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5NU7TiK.MnKHq
 ```
+
+**What each variable does:**
+- **JWT_SECRET:** Secret key for signing authentication tokens. Generate any random string 32+ characters.
+- **FRONTEND_URL:** Where your frontend runs. Use `http://localhost:5173` for local development.
+- **PIN_HASH:** Bcrypt hash of your PIN. The default is for PIN "1234" - no change needed for testing.
 
 **Run the backend:**
 ```bash
@@ -197,9 +207,14 @@ Frontend will be available at: **http://localhost:5173**
    - **Framework Preset:** Python (auto-detected)
 4. Add Environment Variables:
    ```
+   # Use the default PIN hash for "1234", or generate your own
    PIN_HASH=$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5NU7TiK.MnKHq
-   JWT_SECRET=your-random-secret-key-min-32-chars
-   FRONTEND_URL=https://your-frontend-domain.vercel.app
+
+   # Generate a random 32+ character secret key
+   JWT_SECRET=generate-a-random-32-character-string
+
+   # After deploying frontend, come back and update this
+   FRONTEND_URL=https://your-frontend-project-name.vercel.app
    ```
 5. Click "Deploy"
 
@@ -211,9 +226,40 @@ Frontend will be available at: **http://localhost:5173**
    - **Framework Preset:** Vite (auto-detected)
 4. Add Environment Variable:
    ```
-   VITE_API_URL=https://your-backend-domain.vercel.app/api/v1
+   # Use your backend URL from Step 1
+   VITE_API_URL=https://your-backend-project-name.vercel.app/api/v1
    ```
 5. Click "Deploy"
+
+**Step 3: Update CORS (Important!)**
+After both deployments finish:
+1. Go back to your backend project on Vercel
+2. Update `FRONTEND_URL` to your actual frontend domain
+3. Redeploy backend
+
+---
+
+### Quick Reference: What Values to Use
+
+**Local Development:**
+```bash
+# Backend (.env)
+JWT_SECRET=any-random-string-for-local-dev-32chars
+FRONTEND_URL=http://localhost:5173
+
+# Frontend (.env)
+VITE_API_URL=http://localhost:8000/api/v1
+```
+
+**Production (Vercel):**
+```bash
+# Backend (Vercel env vars)
+JWT_SECRET=xK7mN9pL2vR8sT4wQ6yH3jF5dD8gV1nB2cM6kP (generate your own 32-char string)
+FRONTEND_URL=https://photobooth-web.vercel.app (your actual frontend domain)
+
+# Frontend (Vercel env vars)
+VITE_API_URL=https://photobooth-api.vercel.app/api/v1 (your actual backend domain)
+```
 
 ### Option 2: Deploy via GitHub CLI
 
