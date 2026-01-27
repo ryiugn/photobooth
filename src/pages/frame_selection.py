@@ -242,8 +242,8 @@ class FrameSelectionPage(QWidget):
 
         # Create 4 frame slot cards
         for i in range(4):
-            slot = FrameSlotCard(slot_number=i + 1, parent=self)
-            slot.slot_clicked.connect(lambda idx=i: self._on_slot_clicked(idx))
+            slot = FrameSlotCard(slot_index=i)
+            slot.clicked.connect(self._on_slot_clicked)
             self.frame_slots.append(slot)
             slots_container.addWidget(slot)
 
