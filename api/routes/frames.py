@@ -1,0 +1,196 @@
+"""
+Frame management routes for listing, uploading, and deleting photo frames.
+"""
+
+from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, status
+from pydantic import BaseModel
+from typing import List, Optional
+from pathlib import Path
+import shutil
+import uuid
+from datetime import datetime
+
+from config import settings
+from routes.auth import get_current_user
+
+router = APIRouter()
+
+
+# Response Models
+class FrameInfo(BaseModel):
+    """Information about a frame."""
+    id: str
+    name: str
+    url: str
+    thumbnail_url: Optional[str] = None
+    created: str
+
+
+class FramesListResponse(BaseModel):
+    """Response containing list of frames."""
+    frames: List[FrameInfo]
+
+
+class FrameUploadResponse(BaseModel):
+    """Response after frame upload."""
+    id: str
+    name: str
+    url: str
+    message: str = "Frame uploaded successfully"
+
+
+# Utility Functions
+def get_frames_dir() -> Path:
+    """Get the frames directory path, creating if needed."""
+    frames_dir = Path(settings.FRAMES_DIR)
+    frames_dir.mkdir(parents=True, exist_ok=True)
+    return frames_dir
+
+
+def generate_frame_id() -> str:
+    """Generate a unique frame ID."""
+    return f"frame_{uuid.uuid4().hex[:8]}"
+
+
+# Routes
+@router.get("", response_model=FramesListResponse)
+async def list_frames(user: dict = Depends(get_current_user)):
+    """
+    List all available frames.
+
+    Returns:
+        FramesListResponse with list of frame info
+    """
+    frames_dir = get_frames_dir()
+    frames = []
+
+    for frame_file in frames_dir.glob("*"):
+        if frame_file.suffix.lower() in ['.png', '.jpg', '.jpeg', '.webp']:
+            frame_id = frame_file.stem
+            frame_name = frame_file.stem.replace('_', ' ').title()
+            # Use relative path that frontend can access via /api/v1/frames/{id}/content
+            frame_url = f"/api/v1/frames/{frame_id}/content"
+
+            frames.append(FrameInfo(
+                id=frame_id,
+                name=frame_name,
+                url=frame_url,
+                thumbnail_url=frame_url,  # Same URL for now
+                created=datetime.fromtimestamp(frame_file.stat().st_ctime).isoformat()
+            ))
+
+    # Sort by name
+    frames.sort(key=lambda f: f.name)
+
+    return FramesListResponse(frames=frames)
+
+
+@router.post("/upload", response_model=FrameUploadResponse)
+async def upload_frame(
+    file: UploadFile = File(...),
+    user: dict = Depends(get_current_user)
+):
+    """
+    Upload a new frame image.
+
+    Args:
+        file: Uploaded image file
+
+    Returns:
+        FrameUploadResponse with frame info
+
+    Raises:
+        HTTPException: If file type is invalid
+    """
+    # Validate file type
+    if not file.content_type or not file.content_type.startswith('image/'):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="File must be an image"
+        )
+
+    # Validate file extension
+    valid_extensions = ['.png', '.jpg', '.jpeg', '.webp']
+    file_ext = Path(file.filename).suffix.lower()
+    if file_ext not in valid_extensions:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid file type. Allowed: {', '.join(valid_extensions)}"
+        )
+
+    # Generate unique frame ID and filename
+    frame_id = generate_frame_id()
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"custom_{timestamp}_{frame_id}{file_ext}"
+
+    # Save file
+    frames_dir = get_frames_dir()
+    file_path = frames_dir / filename
+
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    frame_url = f"/api/v1/frames/{frame_id}/content"
+
+    return FrameUploadResponse(
+        id=frame_id,
+        name=Path(file.filename).stem.replace('_', ' ').title(),
+        url=frame_url,
+        message="Frame uploaded successfully"
+    )
+
+
+@router.get("/{frame_id}/content")
+async def get_frame_content(frame_id: str):
+    """
+    Get the actual frame image file.
+
+    Args:
+        frame_id: Frame identifier
+
+    Returns:
+        File response with the frame image
+
+    Raises:
+        HTTPException: If frame not found
+    """
+    frames_dir = get_frames_dir()
+
+    # Find file by matching the frame_id
+    for frame_file in frames_dir.glob("*"):
+        if frame_id in frame_file.stem and frame_file.suffix.lower() in ['.png', '.jpg', '.jpeg', '.webp']:
+            from fastapi.responses import FileResponse
+            return FileResponse(frame_file, media_type=f"image/{frame_file.suffix[1:]}")
+
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=f"Frame '{frame_id}' not found"
+    )
+
+
+@router.delete("/{frame_id}")
+async def delete_frame(frame_id: str, user: dict = Depends(get_current_user)):
+    """
+    Delete a frame.
+
+    Args:
+        frame_id: Frame identifier
+
+    Returns:
+        Success message
+
+    Raises:
+        HTTPException: If frame not found
+    """
+    frames_dir = get_frames_dir()
+
+    # Find and delete file
+    for frame_file in frames_dir.glob("*"):
+        if frame_id in frame_file.stem:
+            frame_file.unlink()
+            return {"message": f"Frame '{frame_id}' deleted successfully"}
+
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=f"Frame '{frame_id}' not found"
+    )

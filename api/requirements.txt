@@ -1,0 +1,29 @@
+# FastAPI Backend Requirements for Vercel Serverless Functions
+
+# Core web framework
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+
+# Data validation
+pydantic==2.5.0
+
+# File uploads
+python-multipart==0.0.5
+
+# Image processing (reuse from desktop app)
+Pillow==10.1.0
+numpy==1.24.3
+opencv-python==4.8.1.78
+
+# Authentication
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+
+# Database/Storage (Supabase)
+supabase==2.3.9
+
+# Environment variables
+python-dotenv==1.0.0
+
+# Utilities
+aiofiles==23.2.1
