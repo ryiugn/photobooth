@@ -20,9 +20,9 @@ interface AppStore extends AppState {
 }
 
 export const useAppStore = create<AppStore>((set) => ({
-  // Initial state
-  isAuthenticated: !!localStorage.getItem('access_token'),
-  token: localStorage.getItem('access_token'),
+  // Initial state - check sessionStorage instead of localStorage
+  isAuthenticated: !!sessionStorage.getItem('access_token'),
+  token: sessionStorage.getItem('access_token'),
   sessionId: null,
   selectedFrames: [null, null, null, null],
   capturedPhotos: [],
@@ -35,9 +35,9 @@ export const useAppStore = create<AppStore>((set) => ({
   setAuthenticated: (isAuthenticated, token) => {
     set({ isAuthenticated, token });
     if (token) {
-      localStorage.setItem('access_token', token);
+      sessionStorage.setItem('access_token', token);
     } else {
-      localStorage.removeItem('access_token');
+      sessionStorage.removeItem('access_token');
     }
   },
 
@@ -98,6 +98,6 @@ export const useAppStore = create<AppStore>((set) => ({
       currentPhotoIndex: 0,
       finalPhotostrip: null,
     });
-    localStorage.removeItem('access_token');
+    sessionStorage.removeItem('access_token');
   },
 }));

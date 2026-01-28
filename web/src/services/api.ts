@@ -31,7 +31,7 @@ class ApiService {
     // Request interceptor to add auth token
     this.client.interceptors.request.use(
       (config: InternalAxiosRequestConfig) => {
-        const token = localStorage.getItem('access_token');
+        const token = sessionStorage.getItem('access_token');
         if (token && config.headers) {
           config.headers.Authorization = `Bearer ${token}`;
         }
@@ -46,7 +46,7 @@ class ApiService {
       (error) => {
         if (error.response?.status === 401) {
           // Unauthorized - clear token and redirect to login
-          localStorage.removeItem('access_token');
+          sessionStorage.removeItem('access_token');
           window.location.href = '/';
         }
         return Promise.reject(error);
@@ -58,14 +58,14 @@ class ApiService {
   async login(pin: string): Promise<LoginResponse> {
     const response = await this.client.post<LoginResponse>('/auth/login', { pin });
     if (response.data.access_token) {
-      localStorage.setItem('access_token', response.data.access_token);
+      sessionStorage.setItem('access_token', response.data.access_token);
     }
     return response.data;
   }
 
   async logout(): Promise<void> {
     await this.client.post('/auth/logout');
-    localStorage.removeItem('access_token');
+    sessionStorage.removeItem('access_token');
   }
 
   async verifyToken(): Promise<boolean> {
