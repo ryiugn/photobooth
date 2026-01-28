@@ -65,31 +65,39 @@ async def list_frames(user: dict = Depends(get_current_user)):
     Returns:
         FramesListResponse with list of frame info
     """
-    frames_dir = get_frames_dir()
+    # On Vercel serverless, we return default frames hosted on the frontend
+    # Frontend serves static files from /frames/*.png
+    frontend_url = settings.FRONTEND_URL.rstrip('/')
+
+    # Default frames - these are hosted in the frontend's public/frames folder
+    default_frames = [
+        {
+            "id": "frame_simple",
+            "name": "Simple Pink",
+            "filename": "frame_simple.png"
+        },
+        {
+            "id": "frame_kawaii",
+            "name": "Kawaii Pastel",
+            "filename": "frame_kawaii.png"
+        },
+        {
+            "id": "frame_classic",
+            "name": "Classic Dark",
+            "filename": "frame_classic.png"
+        }
+    ]
+
     frames = []
-
-    # Check if directory exists and is accessible
-    if not frames_dir.exists():
-        return FramesListResponse(frames=frames)
-
-    try:
-        for frame_file in frames_dir.glob("*"):
-            if frame_file.suffix.lower() in ['.png', '.jpg', '.jpeg', '.webp']:
-                frame_id = frame_file.stem
-                frame_name = frame_file.stem.replace('_', ' ').title()
-                # Use relative path that frontend can access via /api/v1/frames/{id}/content
-                frame_url = f"/api/v1/frames/{frame_id}/content"
-
-                frames.append(FrameInfo(
-                    id=frame_id,
-                    name=frame_name,
-                    url=frame_url,
-                    thumbnail_url=frame_url,  # Same URL for now
-                    created=datetime.fromtimestamp(frame_file.stat().st_ctime).isoformat()
-                ))
-    except Exception:
-        # Return empty list if there's any error accessing the directory
-        pass
+    for frame in default_frames:
+        frame_url = f"{frontend_url}/frames/{frame['filename']}"
+        frames.append(FrameInfo(
+            id=frame['id'],
+            name=frame['name'],
+            url=frame_url,
+            thumbnail_url=frame_url,
+            created="2024-01-01T00:00:00"
+        ))
 
     # Sort by name
     frames.sort(key=lambda f: f.name)
