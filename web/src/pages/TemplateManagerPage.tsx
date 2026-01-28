@@ -8,23 +8,43 @@ import { useAppStore } from '../state/store';
 import { apiService } from '../services/api';
 import type { Template } from '../types';
 
+const STORAGE_KEY = 'photobooth_templates';
+
 export default function TemplateManagerPage() {
   const navigate = useNavigate();
-  const { templates, setTemplates, setSelectedFrame, selectedFrames } = useAppStore();
+  const { templates, setTemplates, setSelectedFrame, selectedFrames, availableFrames } = useAppStore();
   const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
 
-  // Load templates on mount
+  // Load templates from sessionStorage on mount
   useEffect(() => {
-    apiService.getTemplates().then(setTemplates).catch(console.error);
+    const loadTemplates = () => {
+      try {
+        const stored = sessionStorage.getItem(STORAGE_KEY);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          setTemplates(parsed);
+        } else {
+          // Fallback to API if nothing in storage
+          apiService.getTemplates().then(setTemplates).catch(() => setTemplates([]));
+        }
+      } catch {
+        setTemplates([]);
+      }
+    };
+
+    loadTemplates();
   }, [setTemplates]);
 
   const handleUseTemplate = () => {
     if (!selectedTemplate) return;
 
-    // Apply template frames to selection
-    selectedTemplate.frames.forEach((framePath, index) => {
-      const frameName = framePath.split('/').pop()?.replace('.png', '') || 'Frame';
-      setSelectedFrame(index, [framePath, frameName]);
+    // Apply template frames to selection using frame IDs
+    selectedTemplate.frames.forEach((frameId, index) => {
+      // Find the frame by ID in availableFrames
+      const frame = availableFrames.find(f => f.id === frameId);
+      if (frame) {
+        setSelectedFrame(index, [frame.url, frame.name]);
+      }
     });
 
     navigate('/frames');
@@ -36,10 +56,22 @@ export default function TemplateManagerPage() {
     if (!confirm(`Delete template "${selectedTemplate.name}"?`)) return;
 
     try {
-      await apiService.deleteTemplate(selectedTemplate.id);
-      // Reload templates
-      const updated = await apiService.getTemplates();
-      setTemplates(updated);
+      // Delete from sessionStorage
+      const stored = sessionStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        const updated = parsed.filter((t: Template) => t.id !== selectedTemplate.id);
+        sessionStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+        setTemplates(updated);
+      }
+
+      // Also try to delete from API (will fail silently on serverless)
+      try {
+        await apiService.deleteTemplate(selectedTemplate.id);
+      } catch {
+        // Ignore API errors on serverless
+      }
+
       setSelectedTemplate(null);
     } catch (err) {
       console.error('Delete error:', err);

@@ -72,14 +72,35 @@ export default function FrameSelectionPage() {
         return frameMap[filename] || filename.split('.')[0];
       });
 
-      await apiService.createTemplate({
+      // Create template object
+      const template = {
+        id: `tpl_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         name: name.trim(),
-        frames: frameIds
-      });
+        frames: frameIds,
+        created: new Date().toISOString()
+      };
+
+      // Save to sessionStorage
+      const STORAGE_KEY = 'photobooth_templates';
+      const stored = sessionStorage.getItem(STORAGE_KEY);
+      const templates = stored ? JSON.parse(stored) : [];
+      templates.push(template);
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(templates));
+
+      // Also try to save to API (will fail silently on serverless)
+      try {
+        await apiService.createTemplate({
+          name: name.trim(),
+          frames: frameIds
+        });
+      } catch {
+        // Ignore API errors - sessionStorage is the primary storage
+      }
+
       alert('Template saved successfully!');
     } catch (error: any) {
       console.error('Failed to save template:', error);
-      alert(error.response?.data?.detail || 'Failed to save template');
+      alert('Failed to save template');
     }
   };
 
