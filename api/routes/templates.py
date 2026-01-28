@@ -53,7 +53,11 @@ class TemplateCreateResponse(BaseModel):
 def get_templates_dir() -> Path:
     """Get the templates directory path, creating if needed."""
     templates_dir = Path(settings.TEMPLATES_DIR)
-    templates_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        templates_dir.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        # On serverless platforms like Vercel, filesystem may be read-only
+        pass
     return templates_dir
 
 
@@ -79,20 +83,28 @@ async def list_templates(user: dict = Depends(get_current_user)):
     templates_dir = get_templates_dir()
     templates = []
 
-    for json_file in templates_dir.glob("*.json"):
-        try:
-            with open(json_file, 'r', encoding='utf-8') as f:
-                data = json.load(f)
+    # Check if directory exists and is accessible
+    if not templates_dir.exists():
+        return TemplatesListResponse(templates=templates)
 
-            templates.append(TemplateInfo(
-                id=data.get("id", json_file.stem),
-                name=data["name"],
-                frames=data["frames"],
-                created=data.get("created", "")
-            ))
-        except (json.JSONDecodeError, KeyError, ValueError):
-            # Skip corrupted files
-            continue
+    try:
+        for json_file in templates_dir.glob("*.json"):
+            try:
+                with open(json_file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+
+                templates.append(TemplateInfo(
+                    id=data.get("id", json_file.stem),
+                    name=data["name"],
+                    frames=data["frames"],
+                    created=data.get("created", "")
+                ))
+            except (json.JSONDecodeError, KeyError, ValueError):
+                # Skip corrupted files
+                continue
+    except Exception:
+        # Return empty list if there's any error accessing the directory
+        pass
 
     # Sort by created date (newest first)
     templates.sort(key=lambda t: t.created, reverse=True)

@@ -14,7 +14,7 @@ class Settings:
         self.DEBUG = os.getenv("DEBUG", "false").lower() == "true"
 
         # Authentication
-        self.PIN_HASH = os.getenv("PIN_HASH", "$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5NU7TiK.MnKHq")
+        self.PIN_HASH = os.getenv("PIN_HASH", "$2b$12$MvoY/xwcjRW2fNUZ2Kr0AeZk6A/dZL2v1QiT1RDpC75BFEP6o7t4a")
         self.JWT_SECRET = os.getenv("JWT_SECRET", "your-secret-key-change-in-production")
         self.JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
         self.ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))

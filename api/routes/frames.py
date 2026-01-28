@@ -43,7 +43,11 @@ class FrameUploadResponse(BaseModel):
 def get_frames_dir() -> Path:
     """Get the frames directory path, creating if needed."""
     frames_dir = Path(settings.FRAMES_DIR)
-    frames_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        frames_dir.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        # On serverless platforms like Vercel, filesystem may be read-only
+        pass
     return frames_dir
 
 
@@ -64,20 +68,28 @@ async def list_frames(user: dict = Depends(get_current_user)):
     frames_dir = get_frames_dir()
     frames = []
 
-    for frame_file in frames_dir.glob("*"):
-        if frame_file.suffix.lower() in ['.png', '.jpg', '.jpeg', '.webp']:
-            frame_id = frame_file.stem
-            frame_name = frame_file.stem.replace('_', ' ').title()
-            # Use relative path that frontend can access via /api/v1/frames/{id}/content
-            frame_url = f"/api/v1/frames/{frame_id}/content"
+    # Check if directory exists and is accessible
+    if not frames_dir.exists():
+        return FramesListResponse(frames=frames)
 
-            frames.append(FrameInfo(
-                id=frame_id,
-                name=frame_name,
-                url=frame_url,
-                thumbnail_url=frame_url,  # Same URL for now
-                created=datetime.fromtimestamp(frame_file.stat().st_ctime).isoformat()
-            ))
+    try:
+        for frame_file in frames_dir.glob("*"):
+            if frame_file.suffix.lower() in ['.png', '.jpg', '.jpeg', '.webp']:
+                frame_id = frame_file.stem
+                frame_name = frame_file.stem.replace('_', ' ').title()
+                # Use relative path that frontend can access via /api/v1/frames/{id}/content
+                frame_url = f"/api/v1/frames/{frame_id}/content"
+
+                frames.append(FrameInfo(
+                    id=frame_id,
+                    name=frame_name,
+                    url=frame_url,
+                    thumbnail_url=frame_url,  # Same URL for now
+                    created=datetime.fromtimestamp(frame_file.stat().st_ctime).isoformat()
+                ))
+    except Exception:
+        # Return empty list if there's any error accessing the directory
+        pass
 
     # Sort by name
     frames.sort(key=lambda f: f.name)
