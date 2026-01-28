@@ -2,58 +2,44 @@
 Configuration module for the Photobooth API.
 """
 
-from pydantic import BaseSettings
-from functools import lru_cache
 import os
 
 
-class Settings(BaseSettings):
+class Settings:
     """Application settings loaded from environment variables."""
 
-    # App Configuration
-    APP_NAME: str = "Photobooth API"
-    DEBUG: bool = False
+    def __init__(self):
+        # App Configuration
+        self.APP_NAME = os.getenv("APP_NAME", "Photobooth API")
+        self.DEBUG = os.getenv("DEBUG", "false").lower() == "true"
 
-    # Authentication
-    PIN_HASH: str = "$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5NU7TiK.MnKHq"  # Default: "1234"
-    JWT_SECRET: str = "your-secret-key-change-in-production"
-    JWT_ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+        # Authentication
+        self.PIN_HASH = os.getenv("PIN_HASH", "$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5NU7TiK.MnKHq")
+        self.JWT_SECRET = os.getenv("JWT_SECRET", "your-secret-key-change-in-production")
+        self.JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
+        self.ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
 
-    # CORS
-    FRONTEND_URL: str = "http://localhost:3000"
-    ALLOWED_ORIGINS: list = ["http://localhost:3000", "http://localhost:5173"]
+        # CORS
+        self.FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
+        self.ALLOWED_ORIGINS = ["http://localhost:3000", "http://localhost:5173"]
+        if self.FRONTEND_URL not in self.ALLOWED_ORIGINS:
+            self.ALLOWED_ORIGINS.append(self.FRONTEND_URL)
 
-    # Supabase Configuration
-    SUPABASE_URL: str = ""
-    SUPABASE_KEY: str = ""
-    SUPABASE_STORAGE_BUCKET: str = "photobooth"
+        # File Storage (local)
+        self.FRAMES_DIR = os.getenv("FRAMES_DIR", "project_files/frames")
+        self.TEMPLATES_DIR = os.getenv("TEMPLATES_DIR", "project_files/templates")
+        self.UPLOADS_DIR = os.getenv("UPLOADS_DIR", "project_files/uploads")
+        self.SESSIONS_DIR = os.getenv("SESSIONS_DIR", "project_files/sessions")
+        self.STRIPS_DIR = os.getenv("STRIPS_DIR", "project_files/strips")
 
-    # File Storage (local fallback)
-    FRAMES_DIR: str = "project_files/frames"
-    TEMPLATES_DIR: str = "project_files/templates"
-    UPLOADS_DIR: str = "project_files/uploads"
-    SESSIONS_DIR: str = "project_files/sessions"
-    STRIPS_DIR: str = "project_files/strips"
+        # Processing
+        self.MAX_PHOTO_SIZE_MB = int(os.getenv("MAX_PHOTO_SIZE_MB", "10"))
+        self.PHOTO_QUALITY = int(os.getenv("PHOTO_QUALITY", "95"))
 
-    # Camera/Processing
-    MAX_PHOTO_SIZE_MB: int = 10
-    PHOTO_QUALITY: int = 95
-
-    # Rate Limiting
-    MAX_LOGIN_ATTEMPTS: int = 5
-    LOCKOUT_DURATION_SECONDS: int = 300
-
-    class Config:
-        env_file = ".env"
-        case_sensitive = True
+        # Rate Limiting
+        self.MAX_LOGIN_ATTEMPTS = int(os.getenv("MAX_LOGIN_ATTEMPTS", "5"))
+        self.LOCKOUT_DURATION_SECONDS = int(os.getenv("LOCKOUT_DURATION_SECONDS", "300"))
 
 
-@lru_cache()
-def get_settings() -> Settings:
-    """Get cached settings instance."""
-    return Settings()
-
-
-# Export settings
-settings = get_settings()
+# Export settings singleton
+settings = Settings()
