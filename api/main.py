@@ -21,11 +21,18 @@ app = FastAPI(
 )
 
 # CORS configuration for Vercel deployment
+FRONTEND_URL = os.getenv("FRONTEND_URL", "https://your-domain.vercel.app")
 ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://localhost:5173",  # Vite dev server
-    os.getenv("FRONTEND_URL", "https://your-domain.vercel.app"),
+    FRONTEND_URL,
 ]
+
+# Log CORS configuration for debugging
+import logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+logger.info(f"CORS ALLOWED_ORIGINS: {ALLOWED_ORIGINS}")
 
 app.add_middleware(
     CORSMiddleware,
