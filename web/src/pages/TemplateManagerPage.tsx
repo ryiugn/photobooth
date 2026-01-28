@@ -15,11 +15,11 @@ export default function TemplateManagerPage() {
   const { templates, setTemplates, setSelectedFrame, selectedFrames, availableFrames } = useAppStore();
   const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
 
-  // Load templates from sessionStorage on mount
+  // Load templates from localStorage on mount
   useEffect(() => {
     const loadTemplates = () => {
       try {
-        const stored = sessionStorage.getItem(STORAGE_KEY);
+        const stored = localStorage.getItem(STORAGE_KEY);
         if (stored) {
           const parsed = JSON.parse(stored);
           setTemplates(parsed);
@@ -56,12 +56,12 @@ export default function TemplateManagerPage() {
     if (!confirm(`Delete template "${selectedTemplate.name}"?`)) return;
 
     try {
-      // Delete from sessionStorage
-      const stored = sessionStorage.getItem(STORAGE_KEY);
+      // Delete from localStorage
+      const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
         const updated = parsed.filter((t: Template) => t.id !== selectedTemplate.id);
-        sessionStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
         setTemplates(updated);
       }
 

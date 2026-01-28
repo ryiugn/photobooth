@@ -80,12 +80,12 @@ export default function FrameSelectionPage() {
         created: new Date().toISOString()
       };
 
-      // Save to sessionStorage
+      // Save to localStorage
       const STORAGE_KEY = 'photobooth_templates';
-      const stored = sessionStorage.getItem(STORAGE_KEY);
+      const stored = localStorage.getItem(STORAGE_KEY);
       const templates = stored ? JSON.parse(stored) : [];
       templates.push(template);
-      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(templates));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(templates));
 
       // Also try to save to API (will fail silently on serverless)
       try {
@@ -94,7 +94,7 @@ export default function FrameSelectionPage() {
           frames: frameIds
         });
       } catch {
-        // Ignore API errors - sessionStorage is the primary storage
+        // Ignore API errors - localStorage is the primary storage
       }
 
       alert('Template saved successfully!');
