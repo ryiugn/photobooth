@@ -3,7 +3,7 @@
  * Handles routing and provides global state
  */
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAppStore } from './state/store';
 import { apiService } from './services/api';
@@ -14,15 +14,43 @@ import PhotostripRevealPage from './pages/PhotostripRevealPage';
 import TemplateManagerPage from './pages/TemplateManagerPage';
 
 function App() {
-  const { isAuthenticated, setAvailableFrames, setTemplates } = useAppStore();
+  const { isAuthenticated, setAvailableFrames, setTemplates, setAuthenticated } = useAppStore();
+  const [isTokenVerified, setIsTokenVerified] = useState(false);
+
+  // Verify token on mount
+  useEffect(() => {
+    const verifyToken = async () => {
+      const token = localStorage.getItem('access_token');
+      if (token) {
+        try {
+          const isValid = await apiService.verifyToken();
+          if (!isValid) {
+            // Token is invalid, clear authentication
+            setAuthenticated(false, null);
+          }
+        } catch {
+          // Error verifying token, clear authentication
+          setAuthenticated(false, null);
+        }
+      }
+      setIsTokenVerified(true);
+    };
+
+    verifyToken();
+  }, [setAuthenticated]);
 
   // Load available frames on mount
   useEffect(() => {
-    if (isAuthenticated) {
+    if (isAuthenticated && isTokenVerified) {
       apiService.getFrames().then(setAvailableFrames).catch(console.error);
       apiService.getTemplates().then(setTemplates).catch(console.error);
     }
-  }, [isAuthenticated, setAvailableFrames, setTemplates]);
+  }, [isAuthenticated, isTokenVerified, setAvailableFrames, setTemplates]);
+
+  // Don't render until token is verified
+  if (!isTokenVerified) {
+    return null; // or a loading spinner
+  }
 
   return (
     <BrowserRouter>
