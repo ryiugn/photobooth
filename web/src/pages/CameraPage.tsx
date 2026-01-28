@@ -79,6 +79,20 @@ export default function CameraPage() {
     return () => clearTimeout(timer);
   }, [countdown]);
 
+  // Handle ESC key to close preview or go back
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (showPreview) {
+          handleRetake();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showPreview]);
+
   const capturePhoto = async () => {
     if (!videoRef.current || !canvasRef.current) return;
 

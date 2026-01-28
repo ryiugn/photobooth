@@ -21,6 +21,20 @@ export default function FrameSelectionPage() {
     }
   }, [availableFrames, setAvailableFrames]);
 
+  // Handle ESC key to close frame picker modal
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && showFramePicker) {
+        setShowFramePicker(false);
+      }
+    };
+
+    if (showFramePicker) {
+      window.addEventListener('keydown', handleKeyDown);
+      return () => window.removeEventListener('keydown', handleKeyDown);
+    }
+  }, [showFramePicker]);
+
   const allFramesSelected = selectedFrames.every((f) => f !== null);
 
   const handleSlotClick = (index: number) => {
