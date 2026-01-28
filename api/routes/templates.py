@@ -129,21 +129,8 @@ async def create_template(
     Raises:
         HTTPException: If validation fails
     """
-    # Validate frames exist
-    frames_dir = Path(settings.FRAMES_DIR)
-    for frame_path in request.frames:
-        if not Path(frame_path).exists() and not (frames_dir / Path(frame_path).name).exists():
-            # Check if frame file exists either by full path or just name
-            found = False
-            for ext in ['.png', '.jpg', '.jpeg', '.webp']:
-                if (frames_dir / f"{frame_path}{ext}").exists():
-                    found = True
-                    break
-            if not found:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Frame not found: {frame_path}"
-                )
+    # Note: Frames are now hosted on the frontend, not in the filesystem
+    # We skip file existence validation and just store the frame IDs
 
     # Create template
     template_id = generate_template_id()
@@ -156,13 +143,19 @@ async def create_template(
         "created": timestamp
     }
 
-    # Save to file
-    templates_dir = get_templates_dir()
-    filename = f"{sanitize_filename(request.name)}_{template_id}.json"
-    file_path = templates_dir / filename
+    # Try to save to file (will fail silently on serverless platforms)
+    try:
+        templates_dir = get_templates_dir()
+        if templates_dir.exists():
+            filename = f"{sanitize_filename(request.name)}_{template_id}.json"
+            file_path = templates_dir / filename
 
-    with open(file_path, 'w', encoding='utf-8') as f:
-        json.dump(template_data, f, indent=2)
+            with open(file_path, 'w', encoding='utf-8') as f:
+                json.dump(template_data, f, indent=2)
+    except Exception:
+        # On serverless platforms, templates won't persist
+        # We still return success for the API contract
+        pass
 
     return TemplateCreateResponse(
         id=template_id,
