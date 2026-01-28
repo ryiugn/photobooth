@@ -11,6 +11,25 @@ export interface Frame {
   created: string;
 }
 
+// Custom frame types (user-uploaded, stored in localStorage)
+export interface CustomFrame {
+  id: string;              // UUID for unique identification
+  name: string;            // User-provided display name
+  dataUrl: string;         // Base64-encoded image data
+  type: string;            // 'image/png', 'image/webp', etc.
+  createdAt: string;       // ISO timestamp
+  source: 'user-upload';   // Distinguishes from built-in frames
+}
+
+// Unified frame type for rendering (either built-in or custom)
+export interface DisplayFrame {
+  id: string;
+  name: string;
+  url: string;              // URL for built-in, dataUrl for custom
+  source: 'built-in' | 'user-upload';
+  createdAt: string;
+}
+
 export type SelectedFrame = [string, string] | null; // [path, name] tuple or null
 
 // Template types
