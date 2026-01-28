@@ -42,15 +42,6 @@ async def health_check():
     """Health check endpoint for Vercel."""
     return {"status": "healthy", "service": "photobooth-api"}
 
-# Import and include routers
-from routes import auth, frames, templates, camera, composition
-
-app.include_router(auth.router, prefix="/api/v1/auth", tags=["Authentication"])
-app.include_router(frames.router, prefix="/api/v1/frames", tags=["Frames"])
-app.include_router(templates.router, prefix="/api/v1/templates", tags=["Templates"])
-app.include_router(camera.router, prefix="/api/v1/camera", tags=["Camera"])
-app.include_router(composition.router, prefix="/api/v1/composition", tags=["Composition"])
-
 # Root endpoint
 @app.get("/")
 async def root():
@@ -60,16 +51,18 @@ async def root():
         "docs": "/docs"
     }
 
-# Vercel entry point
-# This is required for Vercel to recognize the Python serverless function
-from fastapi.responses import JSONResponse
+# Import and include routers
+from routes import auth, frames, templates, camera, composition
 
-async def handler(request):
-    """Vercel serverless function entry point."""
-    # This will be called by Vercel's Python runtime
-    return app
+app.include_router(auth.router, prefix="/api/v1/auth", tags=["Authentication"])
+app.include_router(frames.router, prefix="/api/v1/frames", tags=["Frames"])
+app.include_router(templates.router, prefix="/api/v1/templates", tags=["Templates"])
+app.include_router(camera.router, prefix="/api/v1/camera", tags=["Camera"])
+app.include_router(composition.router, prefix="/api/v1/composition", tags=["Composition"])
 
 
+# Vercel serverless entry point
+# Export the ASGI app for Vercel
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
