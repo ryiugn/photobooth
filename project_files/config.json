@@ -7,5 +7,13 @@
     "height": 720
   },
   "frames_dir": "project_files/frames",
-  "output_dir": "project_files/captured_images"
+  "output_dir": "project_files/captured_images",
+  "photostrip": {
+    "photos_per_strip": 4,
+    "countdown_seconds": 3
+  },
+  "printer": {
+    "enabled": true,
+    "default_printer": "default"
+  }
 }

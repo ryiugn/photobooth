@@ -62,7 +62,8 @@ class LoginPage(QWidget):
         self.pin_input.setAlignment(Qt.AlignCenter)
         self.pin_input.setPlaceholderText("Enter PIN")
         self.pin_input.setMaxLength(6)
-        self.pin_input.setReadOnly(True)  # Only editable via keypad
+        # Not read-only - allow physical keyboard input
+        self.pin_input.textChanged.connect(self._on_text_changed)
 
         # Error label
         self.error_label = QLabel("")
@@ -125,51 +126,64 @@ class LoginPage(QWidget):
         return keypad_layout
 
     def apply_styling(self):
-        """Apply FOFOBOOTH styling to the page."""
-        # Dark charcoal background
-        palette = self.palette()
-        palette.setColor(QPalette.Window, Qt.black)
-        self.setPalette(palette)
-        self.setAutoFillBackground(True)
-
-        # Apply stylesheet
+        """Apply scallop seashell gradient styling to the page."""
+        # Apply stylesheet with seashell gradient background
         self.setStyleSheet("""
             QWidget {
-                background-color: #333333;
-                color: #FFFFFF;
+                background: qlineargradient(
+                    x1:0, y1:0, x2:1, y2:1,
+                    stop:0 #FFF8DC,
+                    stop:0.3 #FFF0E0,
+                    stop:0.6 #FFE4C4,
+                    stop:1 #FFDAB9
+                );
+                color: #1A0A00;
             }
 
             QLabel {
-                color: #FFFFFF;
+                color: #1A0A00;
                 font-family: 'Montserrat', 'Poppins', sans-serif;
+                background: transparent;
             }
 
             QLineEdit {
-                background-color: #FFFFFF;
-                color: #333333;
-                border: 2px solid #FFC0CB;
-                border-radius: 10px;
+                background-color: rgba(255, 255, 255, 0.95);
+                color: #1A0A00;
+                border: 3px solid #D4A574;
+                border-radius: 15px;
                 padding: 15px;
                 font-size: 24px;
                 font-family: 'Montserrat', 'Poppins', sans-serif;
             }
 
             QPushButton {
-                background-color: #FFC0CB;
-                color: #333333;
-                border: none;
-                border-radius: 10px;
+                background: qlineargradient(
+                    x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #FFE4C4,
+                    stop:1 #FFDAB9
+                );
+                color: #1A0A00;
+                border: 2px solid #1A0A00;
+                border-radius: 12px;
                 font-size: 24px;
                 font-weight: bold;
                 font-family: 'Montserrat', 'Poppins', sans-serif;
             }
 
             QPushButton:hover {
-                background-color: #FFB6C1;
+                background: qlineargradient(
+                    x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #FFDAB9,
+                    stop:1 #FFCBA4
+                );
             }
 
             QPushButton:pressed {
-                background-color: #FFA0B0;
+                background: qlineargradient(
+                    x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #FFCBA4,
+                    stop:1 #E8B090
+                );
             }
         """)
 
@@ -196,10 +210,38 @@ class LoginPage(QWidget):
         if len(current_pin) < 6:  # Max 6 digits
             self.pin_input.setText(current_pin + digit)
 
+    def _on_text_changed(self, text):
+        """Handle text changed event - auto-submit when PIN is complete."""
+        # Hide error when user starts typing
+        if text:
+            self.error_label.setVisible(False)
+        # Auto-submit when PIN reaches correct length
+        if len(text) == len(self.correct_pin):
+            from PyQt5.QtCore import QTimer
+            QTimer.singleShot(300, self.verify_pin)
+
+    def keyPressEvent(self, event):
+        """Handle key press events - allow Enter/Return to submit PIN."""
+        # Handle Enter/Return keys (including numpad Enter)
+        if event.key() in (Qt.Key_Return, Qt.Key_Enter):
+            current_pin = self.pin_input.text()
+            if current_pin:  # Only verify if there's input
+                self.verify_pin()
+            else:
+                super().keyPressEvent(event)
+        else:
+            super().keyPressEvent(event)
+
     def clear_input(self):
         """Clear the PIN input field."""
         self.pin_input.setText("")
         self.error_label.setVisible(False)
+
+    def showEvent(self, event):
+        """Handle show event - clear PIN when page is shown (e.g., when going back)."""
+        super().showEvent(event)
+        # Clear PIN input when returning to this page
+        self.clear_input()
 
     def verify_pin(self):
         """Verify the entered PIN against the correct PIN."""

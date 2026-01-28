@@ -133,14 +133,15 @@ class TemplateManagerPage(QWidget):
                 background-color: rgba(255, 255, 255, 0.8);
                 border: 2px solid #D4A574;
                 border-radius: 8px;
-                font-size: 14px;
+                font-size: 20px;
                 color: #1A0A00;
                 padding: 5px;
             }
             QListWidget::item {
-                padding: 8px;
+                padding: 20px 15px;
                 border-radius: 4px;
                 margin: 2px;
+                min-height: 70px;
             }
             QListWidget::item:selected {
                 background: qlineargradient(
