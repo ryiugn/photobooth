@@ -80,6 +80,11 @@ export default function LoginPage() {
           type="password"
           value={pin}
           onChange={(e) => handlePinChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && pin.length >= 4) {
+              handleLogin();
+            }
+          }}
           placeholder="••••"
           maxLength={6}
           style={{

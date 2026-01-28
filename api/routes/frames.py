@@ -65,12 +65,13 @@ async def list_frames(user: dict = Depends(get_current_user)):
     Returns:
         FramesListResponse with list of frame info
     """
-    # On Vercel serverless, we return default frames hosted on the frontend
+    # On Vercel serverless, we return frames hosted on the frontend
     # Frontend serves static files from /frames/*.png
     frontend_url = settings.FRONTEND_URL.rstrip('/')
 
-    # Default frames - these are hosted in the frontend's public/frames folder
-    default_frames = [
+    # All available frames - hosted in the frontend's public/frames folder
+    # These must match the actual files in web/public/frames/
+    all_frames = [
         {
             "id": "frame_simple",
             "name": "Simple Pink",
@@ -85,11 +86,41 @@ async def list_frames(user: dict = Depends(get_current_user)):
             "id": "frame_classic",
             "name": "Classic Dark",
             "filename": "frame_classic.png"
+        },
+        {
+            "id": "custom_pwumpd",
+            "name": "Custom Pwumpd",
+            "filename": "custom_20260127_095644_pwumpd.webp"
+        },
+        {
+            "id": "custom_lyazbf",
+            "name": "Custom Lyazbf",
+            "filename": "custom_20260127_204241_lyazbf.PNG"
+        },
+        {
+            "id": "custom_egptpm",
+            "name": "Custom Egptpm",
+            "filename": "custom_20260127_210302_egptpm.PNG"
+        },
+        {
+            "id": "custom_hxgbqw",
+            "name": "Custom Hxgbqw",
+            "filename": "custom_20260127_210302_hxgbqw.PNG"
+        },
+        {
+            "id": "custom_ieyzow",
+            "name": "Custom Ieyzow",
+            "filename": "custom_20260127_210302_ieyzow.PNG"
+        },
+        {
+            "id": "custom_jhmwdz",
+            "name": "Custom Jhmwdz",
+            "filename": "custom_20260127_210302_jhmwdz.PNG"
         }
     ]
 
     frames = []
-    for frame in default_frames:
+    for frame in all_frames:
         frame_url = f"{frontend_url}/frames/{frame['filename']}"
         frames.append(FrameInfo(
             id=frame['id'],
