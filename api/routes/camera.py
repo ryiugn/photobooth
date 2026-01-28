@@ -24,159 +24,82 @@ class CaptureResponse(BaseModel):
     frame_used: str
 
 
-# Utility Functions
-async def save_temp_photo(session_id: str, index: int, file_data: bytes) -> Path:
-    """Save a temporary photo to disk."""
-    sessions_dir = Path(settings.SESSIONS_DIR) / session_id
-    sessions_dir.mkdir(parents=True, exist_ok=True)
-
-    filename = f"photo_{index}.png"
-    file_path = sessions_dir / filename
-
-    with open(file_path, "wb") as f:
-        f.write(file_data)
-
-    return file_path
-
-
 def generate_photo_id() -> str:
     """Generate a unique photo ID."""
     return f"photo_{uuid.uuid4().hex}"
-
-
-async def apply_frame_async(photo_path: Path, frame_path: str) -> bytes:
-    """Apply frame to photo and return as bytes."""
-    from PIL import Image
-    import cv2
-    import numpy as np
-
-    # Load photo
-    photo = cv2.imread(str(photo_path))
-    if photo is None:
-        raise ValueError("Failed to load photo")
-
-    # Convert BGR to RGB
-    rgb_photo = cv2.cvtColor(photo, cv2.COLOR_BGR2RGB)
-    photo_pil = Image.fromarray(rgb_photo)
-
-    # Load frame
-    frame = Image.open(frame_path).convert("RGBA")
-
-    # Get dimensions
-    photo_width, photo_height = photo_pil.size
-    frame_width, frame_height = frame.size
-
-    # Calculate scaling to cover photo
-    scale_x = photo_width / frame_width
-    scale_y = photo_height / frame_height
-    scale = max(scale_x, scale_y)
-
-    # Scale frame
-    scaled_frame_width = int(frame_width * scale)
-    scaled_frame_height = int(frame_height * scale)
-    frame_scaled = frame.resize((scaled_frame_width, scaled_frame_height), Image.Resampling.LANCZOS)
-
-    # Crop frame to match photo dimensions
-    crop_x = (scaled_frame_width - photo_width) // 2
-    crop_y = (scaled_frame_height - photo_height) // 2
-    frame_cropped = frame_scaled.crop((crop_x, crop_y, crop_x + photo_width, crop_y + photo_height))
-
-    # Scale photo to fit within frame (contain)
-    photo_scale_x = photo_width / photo_pil.width
-    photo_scale_y = photo_height / photo_pil.height
-    photo_scale = min(photo_scale_x, photo_scale_y)
-
-    final_photo_width = int(photo_pil.width * photo_scale)
-    final_photo_height = int(photo_pil.height * photo_scale)
-    photo_scaled = photo_pil.resize((final_photo_width, final_photo_height), Image.Resampling.LANCZOS)
-
-    # Center photo
-    photo_x = (photo_width - final_photo_width) // 2
-    photo_y = (photo_height - final_photo_height) // 2
-
-    # Create composition
-    composed = Image.new("RGBA", (photo_width, photo_height))
-    composed.paste(photo_scaled, (photo_x, photo_y))
-    composed.paste(frame_cropped, (0, 0), frame_cropped)
-
-    # Convert to RGB
-    final = composed.convert("RGB")
-
-    # Convert to bytes
-    img_bytes = io.BytesIO()
-    final.save(img_bytes, format='PNG', quality=settings.PHOTO_QUALITY)
-    return img_bytes.getvalue()
-
-
-async def apply_frame_from_bytes(photo_data: bytes, frame_data: bytes) -> bytes:
-    """Apply frame to photo from bytes and return as bytes."""
-    from PIL import Image
-    import cv2
-    import numpy as np
-
-    # Load photo from bytes
-    nparr = np.frombuffer(photo_data, np.uint8)
-    photo = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-    if photo is None:
-        raise ValueError("Failed to load photo from bytes")
-
-    # Convert BGR to RGB
-    rgb_photo = cv2.cvtColor(photo, cv2.COLOR_BGR2RGB)
-    photo_pil = Image.fromarray(rgb_photo)
-
-    # Load frame from bytes
-    frame = Image.open(io.BytesIO(frame_data)).convert("RGBA")
-
-    # Get dimensions
-    photo_width, photo_height = photo_pil.size
-    frame_width, frame_height = frame.size
-
-    # Calculate scaling to cover photo
-    scale_x = photo_width / frame_width
-    scale_y = photo_height / frame_height
-    scale = max(scale_x, scale_y)
-
-    # Scale frame
-    scaled_frame_width = int(frame_width * scale)
-    scaled_frame_height = int(frame_height * scale)
-    frame_scaled = frame.resize((scaled_frame_width, scaled_frame_height), Image.Resampling.LANCZOS)
-
-    # Crop frame to match photo dimensions
-    crop_x = (scaled_frame_width - photo_width) // 2
-    crop_y = (scaled_frame_height - photo_height) // 2
-    frame_cropped = frame_scaled.crop((crop_x, crop_y, crop_x + photo_width, crop_y + photo_height))
-
-    # Scale photo to fit within frame (contain)
-    photo_scale_x = photo_width / photo_pil.width
-    photo_scale_y = photo_height / photo_pil.height
-    photo_scale = min(photo_scale_x, photo_scale_y)
-
-    final_photo_width = int(photo_pil.width * photo_scale)
-    final_photo_height = int(photo_pil.height * photo_scale)
-    photo_scaled = photo_pil.resize((final_photo_width, final_photo_height), Image.Resampling.LANCZOS)
-
-    # Center photo
-    photo_x = (photo_width - final_photo_width) // 2
-    photo_y = (photo_height - final_photo_height) // 2
-
-    # Create composition
-    composed = Image.new("RGBA", (photo_width, photo_height))
-    composed.paste(photo_scaled, (photo_x, photo_y))
-    composed.paste(frame_cropped, (0, 0), frame_cropped)
-
-    # Convert to RGB
-    final = composed.convert("RGB")
-
-    # Convert to bytes
-    img_bytes = io.BytesIO()
-    final.save(img_bytes, format='PNG', quality=settings.PHOTO_QUALITY)
-    return img_bytes.getvalue()
 
 
 def pil_to_base64(image_bytes: bytes) -> str:
     """Convert PIL image bytes to base64 string."""
     import base64
     return f"data:image/png;base64,{base64.b64encode(image_bytes).decode('utf-8')}"
+
+
+async def apply_frame_from_bytes(photo_data: bytes, frame_data: bytes) -> bytes:
+    """Apply frame to photo from bytes and return as bytes.
+
+    Uses only Pillow (PIL) - no OpenCV needed.
+    """
+    from PIL import Image
+
+    # Load photo from bytes (supports JPEG, PNG, WebP)
+    photo_pil = Image.open(io.BytesIO(photo_data))
+
+    # Convert photo to RGBA if it isn't already
+    if photo_pil.mode != 'RGBA':
+        photo_pil = photo_pil.convert('RGBA')
+
+    # Load frame from bytes
+    frame = Image.open(io.BytesIO(frame_data))
+    if frame.mode != 'RGBA':
+        frame = frame.convert('RGBA')
+
+    # Get dimensions
+    photo_width, photo_height = photo_pil.size
+    frame_width, frame_height = frame.size
+
+    # Calculate scaling to cover photo completely
+    scale_x = photo_width / frame_width
+    scale_y = photo_height / frame_height
+    scale = max(scale_x, scale_y)
+
+    # Scale frame to cover photo
+    scaled_frame_width = int(frame_width * scale)
+    scaled_frame_height = int(frame_height * scale)
+    frame_scaled = frame.resize((scaled_frame_width, scaled_frame_height), Image.Resampling.LANCZOS)
+
+    # Crop frame to match photo dimensions (center crop)
+    crop_x = (scaled_frame_width - photo_width) // 2
+    crop_y = (scaled_frame_height - photo_height) // 2
+    frame_cropped = frame_scaled.crop((crop_x, crop_y, crop_x + photo_width, crop_y + photo_height))
+
+    # Scale photo to fit within frame (contain)
+    photo_scale_x = photo_width / photo_pil.width
+    photo_scale_y = photo_height / photo_pil.height
+    photo_scale = min(photo_scale_x, photo_scale_y)
+
+    final_photo_width = int(photo_pil.width * photo_scale)
+    final_photo_height = int(photo_pil.height * photo_scale)
+    photo_scaled = photo_pil.resize((final_photo_width, final_photo_height), Image.Resampling.LANCZOS)
+
+    # Center photo on canvas
+    photo_x = (photo_width - final_photo_width) // 2
+    photo_y = (photo_height - final_photo_height) // 2
+
+    # Create composition with photo as base
+    composed = Image.new("RGBA", (photo_width, photo_height))
+    composed.paste(photo_scaled, (photo_x, photo_y))
+
+    # Composite frame on top using alpha blending
+    composed_with_frame = Image.alpha_composite(composed, frame_cropped)
+
+    # Convert to RGB for JPEG compatibility
+    final = composed_with_frame.convert("RGB")
+
+    # Convert to bytes
+    img_bytes = io.BytesIO()
+    final.save(img_bytes, format='PNG', quality=settings.PHOTO_QUALITY)
+    return img_bytes.getvalue()
 
 
 # Routes
@@ -220,7 +143,6 @@ async def capture_photo(
         )
 
     # Get frame URL from frontend
-    # Frames are hosted on the frontend, so we fetch them by URL
     import httpx
 
     # All available frames with their URLs
