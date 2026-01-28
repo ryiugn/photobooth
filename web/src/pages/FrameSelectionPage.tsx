@@ -28,6 +28,47 @@ export default function FrameSelectionPage() {
     setShowFramePicker(true);
   };
 
+  const handleSaveTemplate = async () => {
+    if (!allFramesSelected) return;
+
+    // Prompt for template name
+    const name = prompt('Enter a name for this template:');
+    if (!name || !name.trim()) {
+      return;
+    }
+
+    try {
+      // Get frame IDs from selected frames
+      const frameIds = selectedFrames.map((f) => {
+        // Extract frame ID from URL
+        // URL format: https://photoboothf.vercel.app/frames/frame_simple.png
+        const filename = f![0].split('/').pop() || '';
+        // Map filename to frame ID
+        const frameMap: Record<string, string> = {
+          'frame_simple.png': 'frame_simple',
+          'frame_kawaii.png': 'frame_kawaii',
+          'frame_classic.png': 'frame_classic',
+          'custom_20260127_095644_pwumpd.webp': 'custom_pwumpd',
+          'custom_20260127_204241_lyazbf.PNG': 'custom_lyazbf',
+          'custom_20260127_210302_egptpm.PNG': 'custom_egptpm',
+          'custom_20260127_210302_hxgbqw.PNG': 'custom_hxgbqw',
+          'custom_20260127_210302_ieyzow.PNG': 'custom_ieyzow',
+          'custom_20260127_210302_jhmwdz.PNG': 'custom_jhmwdz',
+        };
+        return frameMap[filename] || filename.split('.')[0];
+      });
+
+      await apiService.createTemplate({
+        name: name.trim(),
+        frames: frameIds
+      });
+      alert('Template saved successfully!');
+    } catch (error: any) {
+      console.error('Failed to save template:', error);
+      alert(error.response?.data?.detail || 'Failed to save template');
+    }
+  };
+
   const handleFrameSelect = (frame: Frame) => {
     setSelectedFrame(currentSlotIndex, [frame.url, frame.name]);
     setShowFramePicker(false);
@@ -146,7 +187,7 @@ export default function FrameSelectionPage() {
         </button>
 
         <button
-          onClick={() => {/* TODO: Implement save template */}}
+          onClick={handleSaveTemplate}
           className="btn"
           disabled={!allFramesSelected}
           style={{ backgroundColor: '#E3F2FD', color: 'var(--color-text-dark)' }}
