@@ -6,13 +6,16 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../state/store';
 import { apiService } from '../services/api';
-import type { Template } from '../types';
+import { useCustomFrames } from '../hooks/useCustomFrames';
+import type { Template, CustomFrame } from '../types';
 
 const STORAGE_KEY = 'photobooth_templates';
+const CUSTOM_FRAMES_KEY = 'photobooth_custom_frames';
 
 export default function TemplateManagerPage() {
   const navigate = useNavigate();
   const { templates, setTemplates, setSelectedFrame, selectedFrames, availableFrames } = useAppStore();
+  const { customFrames } = useCustomFrames();
   const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
 
   // Load templates from localStorage on mount
@@ -40,8 +43,22 @@ export default function TemplateManagerPage() {
 
     // Apply template frames to selection using frame IDs
     selectedTemplate.frames.forEach((frameId, index) => {
-      // Find the frame by ID in availableFrames
-      const frame = availableFrames.find(f => f.id === frameId);
+      // First try to find in built-in frames
+      let frame = availableFrames.find(f => f.id === frameId);
+
+      // If not found, try custom frames
+      if (!frame) {
+        const customFrame = customFrames.find(cf => cf.id === frameId);
+        if (customFrame) {
+          frame = {
+            id: customFrame.id,
+            name: customFrame.name,
+            url: customFrame.dataUrl,
+            created: customFrame.createdAt
+          };
+        }
+      }
+
       if (frame) {
         setSelectedFrame(index, [frame.url, frame.name]);
       }
@@ -164,19 +181,31 @@ export default function TemplateManagerPage() {
                 width: '100%',
                 maxWidth: '400px',
               }}>
-                {selectedTemplate.frames.map((framePath, index) => (
-                  <img
-                    key={index}
-                    src={framePath}
-                    alt={`Frame ${index + 1}`}
-                    style={{
-                      width: '100%',
-                      height: '80px',
-                      objectFit: 'contain',
-                      marginBottom: index < 3 ? 'var(--spacing-sm)' : 0,
-                    }}
-                  />
-                ))}
+                {selectedTemplate.frames.map((framePath, index) => {
+                  // Resolve frame path to actual URL
+                  // Check if it's a custom frame ID (starts with 'custom_')
+                  let displaySrc = framePath;
+                  if (framePath.startsWith('custom_')) {
+                    const customFrame = customFrames.find(cf => cf.id === framePath);
+                    if (customFrame) {
+                      displaySrc = customFrame.dataUrl;
+                    }
+                  }
+
+                  return (
+                    <img
+                      key={index}
+                      src={displaySrc}
+                      alt={`Frame ${index + 1}`}
+                      style={{
+                        width: '100%',
+                        height: '80px',
+                        objectFit: 'contain',
+                        marginBottom: index < 3 ? 'var(--spacing-sm)' : 0,
+                      }}
+                    />
+                  );
+                })}
               </div>
 
               {/* Actions */}

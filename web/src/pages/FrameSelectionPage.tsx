@@ -76,22 +76,27 @@ export default function FrameSelectionPage() {
     try {
       // Get frame IDs from selected frames
       const frameIds = selectedFrames.map((f) => {
-        // Extract frame ID from URL
+        const frameUrl = f![0];
+
+        // Check if it's a custom frame (data URL starts with 'data:')
+        if (frameUrl.startsWith('data:')) {
+          // Find matching custom frame by data URL
+          const customFrame = customFrames.find(cf => cf.dataUrl === frameUrl);
+          if (customFrame) {
+            return customFrame.id;
+          }
+          // Fallback: try to find by name
+          const customFrameByName = customFrames.find(cf => cf.name === f![1]);
+          if (customFrameByName) {
+            return customFrameByName.id;
+          }
+        }
+
+        // For built-in frames, extract ID from URL
         // URL format: https://photoboothf.vercel.app/frames/frame_simple.png
-        const filename = f![0].split('/').pop() || '';
-        // Map filename to frame ID
-        const frameMap: Record<string, string> = {
-          'frame_simple.png': 'frame_simple',
-          'frame_kawaii.png': 'frame_kawaii',
-          'frame_classic.png': 'frame_classic',
-          'custom_20260127_095644_pwumpd.webp': 'custom_pwumpd',
-          'custom_20260127_204241_lyazbf.PNG': 'custom_lyazbf',
-          'custom_20260127_210302_egptpm.PNG': 'custom_egptpm',
-          'custom_20260127_210302_hxgbqw.PNG': 'custom_hxgbqw',
-          'custom_20260127_210302_ieyzow.PNG': 'custom_ieyzow',
-          'custom_20260127_210302_jhmwdz.PNG': 'custom_jhmwdz',
-        };
-        return frameMap[filename] || filename.split('.')[0];
+        const filename = frameUrl.split('/').pop() || '';
+        // Remove extension to get frame ID
+        return filename.replace(/\.[^/.]+$/, '');
       });
 
       // Create template object
