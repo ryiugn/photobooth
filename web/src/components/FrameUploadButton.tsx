@@ -36,21 +36,10 @@ export const FrameUploadButton: React.FC<FrameUploadButtonProps> = ({
       <button
         onClick={handleClick}
         disabled={disabled || isLoading}
+        className="btn"
         style={{
-          backgroundColor: 'var(--color-primary)',
-          color: '#333333',
-          padding: '12px 24px',
-          fontSize: '14px',
-          fontWeight: 'bold',
-          textTransform: 'uppercase',
-          border: 'none',
-          borderRadius: '8px',
-          cursor: disabled || isLoading ? 'not-allowed' : 'pointer',
-          opacity: disabled || isLoading ? 0.6 : 1,
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px',
-          transition: 'opacity 0.2s ease',
+          backgroundColor: '#E3F2FD',
+          color: 'var(--color-text-dark)',
         }}
       >
         {isLoading ? (
