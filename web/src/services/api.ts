@@ -117,13 +117,17 @@ class ApiService {
   // Camera & Capture
   async capturePhoto(
     photo: Blob,
+    frameUrl: string,
     frameIndex: number,
     sessionId: string
   ): Promise<CaptureResponse> {
     const formData = new FormData();
     formData.append('photo', photo, `photo_${frameIndex}.png`);
+    formData.append('frame_url', frameUrl);
     formData.append('frame_index', frameIndex.toString());
     formData.append('session_id', sessionId);
+
+    console.log('[API] Capturing photo:', { frameUrl, frameIndex, sessionId });
 
     const response = await this.client.post<CaptureResponse>('/camera', formData, {
       headers: {

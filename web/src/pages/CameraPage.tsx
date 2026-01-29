@@ -19,16 +19,21 @@ export default function CameraPage() {
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [stream, setStream] = useState<MediaStream | null>(null);
   const [countdown, setCountdown] = useState<number | null>(null);
   const [showPreview, setShowPreview] = useState(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [sessionId] = useState(`session_${Date.now()}`);
 
+  // Use ref to track media stream for cleanup (avoiding React.StrictMode double-mount issues)
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+
   // Initialize camera on mount
   useEffect(() => {
+    let isComponentMounted = true;
+
     const initializeCamera = async () => {
       try {
+        console.log('[Camera] Initializing camera...');
         const mediaStream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: 'user',
@@ -38,13 +43,22 @@ export default function CameraPage() {
           audio: false,
         });
 
-        setStream(mediaStream);
+        if (!isComponentMounted) {
+          // Component was unmounted while waiting for camera
+          mediaStream.getTracks().forEach((track) => track.stop());
+          return;
+        }
+
+        mediaStreamRef.current = mediaStream;
         if (videoRef.current) {
           videoRef.current.srcObject = mediaStream;
+          console.log('[Camera] Camera initialized successfully');
         }
       } catch (err) {
-        console.error('Camera access error:', err);
-        alert('Camera access denied. Please allow camera permissions.');
+        console.error('[Camera] Camera access error:', err);
+        if (isComponentMounted) {
+          alert('Camera access denied. Please allow camera permissions and refresh.');
+        }
       }
     };
 
@@ -52,8 +66,14 @@ export default function CameraPage() {
 
     // Cleanup on unmount
     return () => {
-      if (stream) {
-        stream.getTracks().forEach((track) => track.stop());
+      isComponentMounted = false;
+      if (mediaStreamRef.current) {
+        console.log('[Camera] Cleaning up camera stream');
+        mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+        mediaStreamRef.current = null;
+      }
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
       }
     };
   }, []);
@@ -109,24 +129,40 @@ export default function CameraPage() {
     // Draw video frame to canvas
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
+    // Get current frame URL
+    const currentFrameUrl = selectedFrames[currentPhotoIndex]?.[0];
+    if (!currentFrameUrl) {
+      console.error('[Capture] No frame selected for photo', currentPhotoIndex);
+      alert('No frame selected. Please go back and select frames.');
+      return;
+    }
+
+    console.log('[Capture] Capturing photo with frame:', currentFrameUrl);
+
     // Convert to blob
     canvas.toBlob(async (blob) => {
-      if (!blob) return;
+      if (!blob) {
+        console.error('[Capture] Failed to create blob from canvas');
+        alert('Failed to capture photo');
+        return;
+      }
 
       try {
         // Send to backend for frame application
         const response = await apiService.capturePhoto(
           blob,
+          currentFrameUrl,
           currentPhotoIndex,
           sessionId
         );
 
+        console.log('[Capture] Photo captured successfully');
         // Show preview
         setPreviewImage(response.framed_photo);
         setShowPreview(true);
       } catch (err) {
-        console.error('Capture error:', err);
-        alert('Failed to capture photo');
+        console.error('[Capture] Capture error:', err);
+        alert('Failed to capture photo. Please try again.');
       }
     }, 'image/png');
   };
@@ -153,8 +189,9 @@ export default function CameraPage() {
   };
 
   const handleBack = () => {
-    if (stream) {
-      stream.getTracks().forEach((track) => track.stop());
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+      mediaStreamRef.current = null;
     }
     resetCapture();
     navigate('/frames');

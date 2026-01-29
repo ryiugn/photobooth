@@ -106,6 +106,7 @@ async def apply_frame_from_bytes(photo_data: bytes, frame_data: bytes) -> bytes:
 @router.post("", response_model=CaptureResponse)
 async def capture_photo(
     photo: UploadFile = File(...),
+    frame_url: str = Form(...),
     frame_index: int = Form(...),
     session_id: str = Form(...),
     user: dict = Depends(get_current_user)
@@ -115,7 +116,8 @@ async def capture_photo(
 
     Args:
         photo: Uploaded photo file
-        frame_index: Index of the frame to apply (0-3)
+        frame_url: URL of the frame to apply (can be data URL for custom frames)
+        frame_index: Index of the frame (for logging purposes)
         session_id: Session identifier for temporary storage (not used on serverless)
 
     Returns:
@@ -124,12 +126,8 @@ async def capture_photo(
     Raises:
         HTTPException: If processing fails
     """
-    # Validate frame index
-    if frame_index < 0 or frame_index > 3:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Frame index must be between 0 and 3"
-        )
+    import httpx
+    import base64
 
     # Read photo data
     photo_data = await photo.read()
@@ -142,37 +140,23 @@ async def capture_photo(
             detail=f"Photo too large. Maximum size: {settings.MAX_PHOTO_SIZE_MB}MB"
         )
 
-    # Get frame URL from frontend
-    import httpx
-
-    # All available frames with their URLs
-    frontend_url = settings.FRONTEND_URL.rstrip('/')
-    all_frames = [
-        {"id": "frame_simple", "filename": "frame_simple.png"},
-        {"id": "frame_kawaii", "filename": "frame_kawaii.png"},
-        {"id": "frame_classic", "filename": "frame_classic.png"},
-        {"id": "custom_pwumpd", "filename": "custom_20260127_095644_pwumpd.webp"},
-        {"id": "custom_lyazbf", "filename": "custom_20260127_204241_lyazbf.PNG"},
-        {"id": "custom_egptpm", "filename": "custom_20260127_210302_egptpm.PNG"},
-        {"id": "custom_hxgbqw", "filename": "custom_20260127_210302_hxgbqw.PNG"},
-        {"id": "custom_ieyzow", "filename": "custom_20260127_210302_ieyzow.PNG"},
-        {"id": "custom_jhmwdz", "filename": "custom_20260127_210302_jhmwdz.PNG"}
-    ]
-
-    if frame_index >= len(all_frames):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Frame index {frame_index} out of range"
-        )
-
-    frame_url = f"{frontend_url}/frames/{all_frames[frame_index]['filename']}"
-
-    # Download frame image from frontend
+    # Get frame data from URL
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            frame_response = await client.get(frame_url)
-            frame_response.raise_for_status()
-            frame_data = frame_response.content
+        # Check if it's a data URL (custom frame from localStorage)
+        if frame_url.startswith('data:'):
+            # Extract base64 data from data URL
+            # Format: data:image/png;base64,iVBORw0KGgo...
+            header, encoded = frame_url.split(',', 1)
+            frame_data = base64.b64decode(encoded)
+            frame_id = f"custom_{frame_index}"
+        else:
+            # It's a regular URL, fetch from server
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                frame_response = await client.get(frame_url)
+                frame_response.raise_for_status()
+                frame_data = frame_response.content
+            # Extract frame ID from URL
+            frame_id = frame_url.split('/')[-1].split('.')[0]
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -193,5 +177,5 @@ async def capture_photo(
     return CaptureResponse(
         photo_id=photo_id,
         framed_photo=pil_to_base64(framed_photo_bytes),
-        frame_used=all_frames[frame_index]['id']
+        frame_used=frame_id
     )
