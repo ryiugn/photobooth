@@ -19,10 +19,12 @@ export default function CameraPage() {
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [countdown, setCountdown] = useState<number | null>(null);
   const [showPreview, setShowPreview] = useState(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [sessionId] = useState(`session_${Date.now()}`);
+  const [cameraError, setCameraError] = useState(false);
 
   // Use ref to track media stream for cleanup (avoiding React.StrictMode double-mount issues)
   const mediaStreamRef = useRef<MediaStream | null>(null);
@@ -54,10 +56,11 @@ export default function CameraPage() {
           videoRef.current.srcObject = mediaStream;
           console.log('[Camera] Camera initialized successfully');
         }
+        setCameraError(false);
       } catch (err) {
         console.error('[Camera] Camera access error:', err);
         if (isComponentMounted) {
-          alert('Camera access denied. Please allow camera permissions and refresh.');
+          setCameraError(true);
         }
       }
     };
@@ -188,6 +191,43 @@ export default function CameraPage() {
     setPreviewImage(null);
   };
 
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    console.log('[Camera] Processing uploaded file:', file.name);
+
+    const currentFrameUrl = selectedFrames[currentPhotoIndex]?.[0];
+    if (!currentFrameUrl) {
+      console.error('[Capture] No frame selected for photo', currentPhotoIndex);
+      alert('No frame selected. Please go back and select frames.');
+      return;
+    }
+
+    try {
+      // Send file directly to backend for frame application
+      const response = await apiService.capturePhoto(
+        file,
+        currentFrameUrl,
+        currentPhotoIndex,
+        sessionId
+      );
+
+      console.log('[Capture] Photo captured successfully from file upload');
+      // Show preview
+      setPreviewImage(response.framed_photo);
+      setShowPreview(true);
+    } catch (err) {
+      console.error('[Capture] Capture error:', err);
+      alert('Failed to capture photo. Please try again.');
+    }
+
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
   const handleBack = () => {
     if (mediaStreamRef.current) {
       mediaStreamRef.current.getTracks().forEach((track) => track.stop());
@@ -234,6 +274,28 @@ export default function CameraPage() {
             alt="Captured"
             style={{ width: '100%', height: '100%', objectFit: 'contain' }}
           />
+        ) : cameraError ? (
+          /* Camera Error State */
+          <div style={{
+            width: '100%',
+            height: '100%',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: '#333',
+            color: 'white',
+            padding: 'var(--spacing-lg)',
+            textAlign: 'center',
+          }}>
+            <div style={{ fontSize: '48px', marginBottom: 'var(--spacing-md)' }}>📷</div>
+            <p style={{ fontSize: 'var(--font-size-lg)', marginBottom: 'var(--spacing-sm)' }}>
+              Camera not available
+            </p>
+            <p style={{ fontSize: 'var(--font-size-sm)', opacity: 0.8, marginBottom: 'var(--spacing-md)' }}>
+              Upload an image to continue
+            </p>
+          </div>
         ) : (
           <>
             <video
@@ -286,6 +348,15 @@ export default function CameraPage() {
       {/* Hidden canvas for capture */}
       <canvas ref={canvasRef} style={{ display: 'none' }} />
 
+      {/* Hidden file input for upload fallback */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        style={{ display: 'none' }}
+        onChange={handleFileUpload}
+      />
+
       {/* Action Buttons */}
       {showPreview ? (
         <div style={{ display: 'flex', gap: 'var(--spacing-md)' }}>
@@ -296,6 +367,18 @@ export default function CameraPage() {
             KEEP →
           </button>
         </div>
+      ) : cameraError ? (
+        /* Show upload button when camera failed */
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          className="btn btn-primary"
+          style={{
+            fontSize: 'var(--font-size-xl)',
+            padding: 'var(--spacing-md) var(--spacing-xl)',
+          }}
+        >
+          📁 UPLOAD PHOTO
+        </button>
       ) : (
         <button
           onClick={handleCapture}
