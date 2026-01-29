@@ -70,9 +70,7 @@ export interface CaptureResponse {
 }
 
 export interface ComposeRequest {
-  session_id: string;
-  photo_ids: string[];
-  frame_paths: string[];
+  photos: string[]; // Array of 4 base64-encoded framed photos
 }
 
 export interface ComposeResponse {

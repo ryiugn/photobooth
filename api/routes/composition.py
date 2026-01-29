@@ -19,9 +19,9 @@ router = APIRouter()
 
 # Request/Response Models
 class ComposeRequest(BaseModel):
-    """Request to compose photostrip."""
-    photos: List[str]  # List of 4 base64-encoded photos
-    frame_ids: List[str]  # List of 4 frame IDs
+    """Request to compose photostrip from already-framed photos."""
+    photos: List[str]  # List of 4 base64-encoded framed photos
+    frame_ids: List[str] | None = None  # Optional, not used (photos already framed)
 
 
 class ComposeResponse(BaseModel):
@@ -172,10 +172,13 @@ async def compose_photostrip(
     user: dict = Depends(get_current_user)
 ):
     """
-    Compose 4 captured photos into a vertical photostrip with frame overlays.
+    Compose 4 already-framed photos into a vertical photostrip.
+
+    Note: Photos are already framed by the capture endpoint.
+    This endpoint only stitches them together.
 
     Args:
-        request: Composition request with photos and frame IDs
+        request: Composition request with 4 base64-encoded framed photos
 
     Returns:
         ComposeResponse with photostrip as base64
@@ -184,10 +187,10 @@ async def compose_photostrip(
         HTTPException: If composition fails
     """
     # Validate exactly 4 photos
-    if len(request.photos) != 4 or len(request.frame_ids) != 4:
+    if len(request.photos) != 4:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Must provide exactly 4 photos and 4 frames"
+            detail="Must provide exactly 4 photos"
         )
 
     # Convert base64 photos to bytes
@@ -199,50 +202,9 @@ async def compose_photostrip(
             detail=f"Invalid photo data: {str(e)}"
         )
 
-    # Fetch frame data from frontend
-    import httpx
-
-    frontend_url = settings.FRONTEND_URL.rstrip('/')
-    all_frames = [
-        {"id": "frame_simple", "filename": "frame_simple.png"},
-        {"id": "frame_kawaii", "filename": "frame_kawaii.png"},
-        {"id": "frame_classic", "filename": "frame_classic.png"},
-        {"id": "custom_pwumpd", "filename": "custom_20260127_095644_pwumpd.webp"},
-        {"id": "custom_lyazbf", "filename": "custom_20260127_204241_lyazbf.PNG"},
-        {"id": "custom_egptpm", "filename": "custom_20260127_210302_egptpm.PNG"},
-        {"id": "custom_hxgbqw", "filename": "custom_20260127_210302_hxgbqw.PNG"},
-        {"id": "custom_ieyzow", "filename": "custom_20260127_210302_ieyzow.PNG"},
-        {"id": "custom_jhmwdz", "filename": "custom_20260127_210302_jhmwdz.PNG"}
-    ]
-
-    # Create frame lookup
-    frame_lookup = {f["id"]: f["filename"] for f in all_frames}
-
-    # Fetch frame data for each frame ID
-    frame_bytes_list = []
-    for frame_id in request.frame_ids:
-        if frame_id not in frame_lookup:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Frame '{frame_id}' not found"
-            )
-
-        frame_url = f"{frontend_url}/frames/{frame_lookup[frame_id]}"
-
-        try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                frame_response = await client.get(frame_url)
-                frame_response.raise_for_status()
-                frame_bytes_list.append(frame_response.content)
-        except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to fetch frame '{frame_id}': {str(e)}"
-            )
-
-    # Compose photostrip
+    # Just stitch the already-framed photos together
     try:
-        strip_bytes = await compose_photostrip_from_bytes(photo_bytes_list, frame_bytes_list)
+        strip_bytes = await stitch_photostrip_from_bytes(photo_bytes_list)
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -257,6 +219,53 @@ async def compose_photostrip(
         photostrip_base64=pil_to_base64(strip_bytes),
         download_url=f"/api/v1/composition/download/{strip_id}"
     )
+
+
+async def stitch_photostrip_from_bytes(photo_bytes_list: List[bytes], gap: int = 20) -> bytes:
+    """
+    Stitch already-framed photos into a vertical photostrip.
+
+    Args:
+        photo_bytes_list: List of 4 framed photos as bytes
+        gap: Gap between photos in pixels
+
+    Returns:
+        Composed photostrip as bytes
+    """
+    from PIL import Image
+
+    if len(photo_bytes_list) != 4:
+        raise ValueError("Must have exactly 4 photos")
+
+    # Load each framed photo
+    framed_photos = []
+    for photo_bytes in photo_bytes_list:
+        photo_pil = Image.open(io.BytesIO(photo_bytes))
+        # Convert to RGB if needed
+        if photo_pil.mode != 'RGB':
+            photo_pil = photo_pil.convert('RGB')
+        framed_photos.append(photo_pil)
+
+    # Get dimensions from first photo
+    first_width, first_height = framed_photos[0].size
+
+    # Calculate strip dimensions
+    strip_width = first_width
+    strip_height = (first_height * len(framed_photos)) + (gap * (len(framed_photos) - 1))
+
+    # Create strip image
+    photostrip = Image.new("RGB", (strip_width, strip_height))
+
+    # Paste each photo vertically
+    y_offset = 0
+    for framed_photo in framed_photos:
+        photostrip.paste(framed_photo, (0, y_offset))
+        y_offset += first_height + gap
+
+    # Convert to bytes
+    img_bytes = io.BytesIO()
+    photostrip.save(img_bytes, format='PNG', quality=settings.PHOTO_QUALITY)
+    return img_bytes.getvalue()
 
 
 @router.get("/download/{strip_id}")

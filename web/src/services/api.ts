@@ -139,6 +139,8 @@ class ApiService {
 
   // Composition
   async composePhotostrip(request: ComposeRequest): Promise<ComposeResponse> {
+    console.log('[API] Composing photostrip with', request.photos.length, 'photos');
+
     const response = await this.client.post<ComposeResponse>('/composition', request);
     return response.data;
   }

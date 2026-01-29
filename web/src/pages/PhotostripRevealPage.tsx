@@ -17,18 +17,18 @@ export default function PhotostripRevealPage() {
   useEffect(() => {
     const composeStrip = async () => {
       try {
-        // Get frame paths from selected frames
-        const framePaths = selectedFrames.map((f) => f?.[0] || '');
+        console.log('[Composition] Composing photostrip from', capturedPhotos.length, 'photos');
 
+        // The photos are already framed from capture endpoint
+        // Just send them to be stitched together
         const response = await apiService.composePhotostrip({
-          session_id: sessionId,
-          photo_ids: ['photo_0', 'photo_1', 'photo_2', 'photo_3'],
-          frame_paths: framePaths,
+          photos: capturedPhotos,
         });
 
+        console.log('[Composition] Photostrip composed successfully');
         setFinalPhotostrip(response.photostrip_base64);
       } catch (err) {
-        console.error('Composition error:', err);
+        console.error('[Composition] Composition error:', err);
         alert('Failed to compose photostrip');
       } finally {
         setIsComposing(false);
@@ -40,7 +40,7 @@ export default function PhotostripRevealPage() {
     } else {
       setIsComposing(false);
     }
-  }, [capturedPhotos, selectedFrames, finalPhotostrip, sessionId, setFinalPhotostrip]);
+  }, [capturedPhotos, finalPhotostrip, setFinalPhotostrip]);
 
   const handleDownload = () => {
     if (!finalPhotostrip) return;
