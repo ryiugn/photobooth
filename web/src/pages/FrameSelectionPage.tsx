@@ -6,6 +6,8 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../state/store';
 import { apiService } from '../services/api';
+import { useCustomFrames } from '../hooks/useCustomFrames';
+import { FrameUploadButton } from '../components/FrameUploadButton';
 import type { SelectedFrame, Frame } from '../types';
 
 export default function FrameSelectionPage() {
@@ -13,6 +15,26 @@ export default function FrameSelectionPage() {
   const { selectedFrames, setSelectedFrame, availableFrames, setAvailableFrames, clearSelectedFrames } = useAppStore();
   const [showFramePicker, setShowFramePicker] = useState(false);
   const [currentSlotIndex, setCurrentSlotIndex] = useState(0);
+
+  // Custom frames hook
+  const {
+    customFrames,
+    isLoading: loadingCustomFrames,
+    uploadProgress,
+    addCustomFrame,
+    deleteCustomFrame
+  } = useCustomFrames();
+
+  // Combine built-in and custom frames
+  const allFrames: Frame[] = [
+    ...availableFrames,
+    ...customFrames.map(cf => ({
+      id: cf.id,
+      name: cf.name,
+      url: cf.dataUrl,
+      created: cf.createdAt
+    }))
+  ];
 
   // Load frames on mount
   useEffect(() => {
@@ -107,6 +129,42 @@ export default function FrameSelectionPage() {
   const handleFrameSelect = (frame: Frame) => {
     setSelectedFrame(currentSlotIndex, [frame.url, frame.name]);
     setShowFramePicker(false);
+  };
+
+  // Handle custom frame upload
+  const handleFrameUpload = async (files: File[]) => {
+    if (files.length === 0) return;
+
+    const file = files[0];
+    const name = prompt('Enter a name for your custom frame:', file.name.replace(/\.[^/.]+$/, ''));
+
+    if (!name || !name.trim()) {
+      alert('Please enter a name for the frame.');
+      return;
+    }
+
+    try {
+      await addCustomFrame(file, name.trim());
+      alert('Custom frame uploaded successfully!');
+    } catch (error) {
+      alert(`Failed to upload frame: ${(error as Error).message}`);
+    }
+  };
+
+  // Handle custom frame deletion
+  const handleDeleteFrame = (frameId: string, e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent frame selection
+
+    if (confirm('Are you sure you want to delete this custom frame?')) {
+      deleteCustomFrame(frameId);
+
+      // If this frame was selected in any slot, clear that slot
+      selectedFrames.forEach((frame, index) => {
+        if (frame && frame[0].includes(frameId)) {
+          setSelectedFrame(index, null);
+        }
+      });
+    }
   };
 
   const handleStartSession = () => {
@@ -213,6 +271,11 @@ export default function FrameSelectionPage() {
         gap: 'var(--spacing-md)',
         flexWrap: 'wrap',
       }}>
+        <FrameUploadButton
+          onFilesSelected={handleFrameUpload}
+          isLoading={uploadProgress > 0}
+        />
+
         <button
           onClick={() => navigate('/templates')}
           className="btn"
@@ -270,37 +333,87 @@ export default function FrameSelectionPage() {
               gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
               gap: 'var(--spacing-md)',
             }}>
-              {availableFrames.map((frame) => (
-                <div
-                  key={frame.id}
-                  onClick={() => handleFrameSelect(frame)}
-                  style={{
-                    cursor: 'pointer',
-                    padding: 'var(--spacing-sm)',
-                    backgroundColor: 'rgba(255, 255, 255, 0.6)',
-                    border: '2px solid #D4A574',
-                    borderRadius: 'var(--border-radius-sm)',
-                    textAlign: 'center',
-                  }}
-                >
-                  <img
-                    src={frame.url}
-                    alt={frame.name}
+              {allFrames.map((frame) => {
+                const isCustomFrame = customFrames.some(cf => cf.id === frame.id);
+
+                return (
+                  <div
+                    key={frame.id}
+                    onClick={() => handleFrameSelect(frame)}
                     style={{
-                      width: '160px',
-                      height: '160px',
-                      objectFit: 'contain',
+                      cursor: 'pointer',
+                      padding: 'var(--spacing-sm)',
+                      backgroundColor: 'rgba(255, 255, 255, 0.6)',
+                      border: '2px solid #D4A574',
+                      borderRadius: 'var(--border-radius-sm)',
+                      textAlign: 'center',
+                      position: 'relative',
                     }}
-                  />
-                  <p style={{
-                    color: 'var(--color-text-dark)',
-                    marginTop: 'var(--spacing-xs)',
-                    fontSize: 'var(--font-size-sm)',
-                  }}>
-                    {frame.name}
-                  </p>
-                </div>
-              ))}
+                  >
+                    {/* Delete button for custom frames */}
+                    {isCustomFrame && (
+                      <button
+                        onClick={(e) => handleDeleteFrame(frame.id, e)}
+                        style={{
+                          position: 'absolute',
+                          top: '4px',
+                          right: '4px',
+                          backgroundColor: '#ff6b6b',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '50%',
+                          width: '24px',
+                          height: '24px',
+                          cursor: 'pointer',
+                          fontSize: '14px',
+                          fontWeight: 'bold',
+                          lineHeight: '1',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                        title="Delete custom frame"
+                      >
+                        ×
+                      </button>
+                    )}
+
+                    {/* Custom frame badge */}
+                    {isCustomFrame && (
+                      <div style={{
+                        position: 'absolute',
+                        top: '4px',
+                        left: '4px',
+                        backgroundColor: '#9b59b6',
+                        color: 'white',
+                        fontSize: '10px',
+                        padding: '2px 6px',
+                        borderRadius: '10px',
+                        fontWeight: 'bold',
+                      }}>
+                          CUSTOM
+                        </div>
+                    )}
+
+                    <img
+                      src={frame.url}
+                      alt={frame.name}
+                      style={{
+                        width: '160px',
+                        height: '160px',
+                        objectFit: 'contain',
+                      }}
+                    />
+                    <p style={{
+                      color: 'var(--color-text-dark)',
+                      marginTop: 'var(--spacing-xs)',
+                      fontSize: 'var(--font-size-sm)',
+                    }}>
+                      {frame.name}
+                    </p>
+                  </div>
+                );
+              })}
             </div>
 
             <button
