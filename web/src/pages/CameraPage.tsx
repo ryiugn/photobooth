@@ -56,14 +56,10 @@ export default function CameraPage() {
         mediaStreamRef.current = mediaStream;
         if (videoRef.current) {
           videoRef.current.srcObject = mediaStream;
+          console.log('[Camera] Media stream attached to video element');
 
-          // Wait for video to be ready
-          videoRef.current.onloadedmetadata = () => {
-            console.log('[Camera] Video metadata loaded, camera ready');
-            if (isComponentMounted) {
-              setCameraReady(true);
-            }
-          };
+          // Set camera ready immediately - don't wait for metadata
+          setCameraReady(true);
         }
         setCameraError(false);
       } catch (err) {
@@ -88,10 +84,22 @@ export default function CameraPage() {
       }
       if (videoRef.current) {
         videoRef.current.srcObject = null;
-        videoRef.current.onloadedmetadata = null;
       }
     };
   }, []);
+
+  // Re-attach media stream when video element is recreated after conditional rendering
+  useEffect(() => {
+    // When showPreview changes from true to false, video element is recreated
+    if (!showPreview && videoRef.current && mediaStreamRef.current) {
+      console.log('[Camera] Video element recreated, re-attaching media stream');
+      videoRef.current.srcObject = mediaStreamRef.current;
+      // Play the video to ensure it's active
+      videoRef.current.play().catch(err => {
+        console.error('[Camera] Failed to play video:', err);
+      });
+    }
+  }, [showPreview]);
 
   const handleCapture = async () => {
     console.log('[Camera] handleCapture called, cameraReady:', cameraReady, 'videoRef:', !!videoRef.current);
