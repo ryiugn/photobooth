@@ -14,13 +14,15 @@ const CUSTOM_FRAMES_KEY = 'photobooth_custom_frames';
 
 export default function TemplateManagerPage() {
   const navigate = useNavigate();
-  const { templates, setTemplates, setSelectedFrame, selectedFrames, availableFrames } = useAppStore();
+  const { templates, setTemplates, setSelectedFrame, selectedFrames, availableFrames, setAvailableFrames } = useAppStore();
   const { customFrames } = useCustomFrames();
   const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
+  const [isLoadingFrames, setIsLoadingFrames] = useState(false);
 
-  // Load templates from localStorage on mount
+  // Load templates and available frames on mount
   useEffect(() => {
-    const loadTemplates = () => {
+    const loadData = async () => {
+      // Load templates from localStorage
       try {
         const stored = localStorage.getItem(STORAGE_KEY);
         if (stored) {
@@ -33,23 +35,47 @@ export default function TemplateManagerPage() {
       } catch {
         setTemplates([]);
       }
+
+      // Load available frames from API if not already loaded
+      if (!availableFrames || availableFrames.length === 0) {
+        console.log('[Template] Loading available frames from API...');
+        setIsLoadingFrames(true);
+        try {
+          const frames = await apiService.getFrames();
+          console.log('[Template] Loaded frames:', frames.map(f => f.id));
+          setAvailableFrames(frames);
+        } catch (err) {
+          console.error('[Template] Failed to load frames:', err);
+        } finally {
+          setIsLoadingFrames(false);
+        }
+      }
     };
 
-    loadTemplates();
-  }, [setTemplates]);
+    loadData();
+  }, [setTemplates, availableFrames, setAvailableFrames]);
 
   const handleUseTemplate = () => {
     if (!selectedTemplate) return;
 
+    console.log('[Template] Loading template:', selectedTemplate.name);
+    console.log('[Template] Template frame IDs:', selectedTemplate.frames);
+    console.log('[Template] Available frames:', availableFrames.map(f => ({ id: f.id, name: f.name })));
+    console.log('[Template] Custom frames:', customFrames.map(cf => ({ id: cf.id, name: cf.name })));
+
     // Apply template frames to selection using frame IDs
     selectedTemplate.frames.forEach((frameId, index) => {
+      console.log(`[Template] Loading slot ${index}, frameId: ${frameId}`);
+
       // First try to find in built-in frames
       let frame = availableFrames.find(f => f.id === frameId);
 
       // If not found, try custom frames
       if (!frame) {
+        console.log(`[Template] Frame ${frameId} not found in available frames, checking custom frames`);
         const customFrame = customFrames.find(cf => cf.id === frameId);
         if (customFrame) {
+          console.log(`[Template] Found in custom frames: ${customFrame.name}`);
           frame = {
             id: customFrame.id,
             name: customFrame.name,
@@ -60,7 +86,10 @@ export default function TemplateManagerPage() {
       }
 
       if (frame) {
+        console.log(`[Template] Setting frame at slot ${index}:`, frame.name);
         setSelectedFrame(index, [frame.url, frame.name]);
+      } else {
+        console.error(`[Template] Frame ${frameId} not found anywhere!`);
       }
     });
 
@@ -210,8 +239,15 @@ export default function TemplateManagerPage() {
 
               {/* Actions */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-sm)', width: '100%', maxWidth: '300px' }}>
-                <button onClick={handleUseTemplate} className="btn btn-primary">
-                  USE THIS TEMPLATE
+                <button
+                  onClick={handleUseTemplate}
+                  disabled={isLoadingFrames || availableFrames.length === 0}
+                  className="btn btn-primary"
+                  style={{
+                    opacity: (isLoadingFrames || availableFrames.length === 0) ? 0.6 : 1,
+                  }}
+                >
+                  {isLoadingFrames ? '⏳ LOADING FRAMES...' : availableFrames.length === 0 ? '❌ NO FRAMES AVAILABLE' : 'USE THIS TEMPLATE'}
                 </button>
                 <button onClick={handleDeleteTemplate} className="btn" style={{ backgroundColor: '#FF6B6B', color: 'white' }}>
                   🗑 DELETE TEMPLATE
