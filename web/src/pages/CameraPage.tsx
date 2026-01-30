@@ -220,6 +220,13 @@ export default function CameraPage() {
         setPreviewImage(null);
         // Reset countdown to re-enable the CAPTURE button
         setCountdown(null);
+        // Restart video playback after video element re-appears
+        setTimeout(() => {
+          if (videoRef.current) {
+            console.log('[Camera] Restarting video playback');
+            videoRef.current.play().catch(err => console.error('[Camera] Failed to play video:', err));
+          }
+        }, 0);
       }
     }
   };
@@ -230,6 +237,13 @@ export default function CameraPage() {
     setPreviewImage(null);
     // Reset countdown to re-enable the CAPTURE button
     setCountdown(null);
+    // Restart video playback after video element re-appears
+    setTimeout(() => {
+      if (videoRef.current) {
+        console.log('[Camera] Restarting video playback');
+        videoRef.current.play().catch(err => console.error('[Camera] Failed to play video:', err));
+      }
+    }, 0);
   };
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
