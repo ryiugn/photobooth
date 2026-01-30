@@ -56,14 +56,7 @@ export default function CameraPage() {
         mediaStreamRef.current = mediaStream;
         if (videoRef.current) {
           videoRef.current.srcObject = mediaStream;
-
-          // Wait for video to be ready
-          videoRef.current.onloadedmetadata = () => {
-            console.log('[Camera] Video metadata loaded, camera ready');
-            if (isComponentMounted) {
-              setCameraReady(true);
-            }
-          };
+          console.log('[Camera] Media stream attached to video element');
         }
         setCameraError(false);
       } catch (err) {
@@ -88,10 +81,19 @@ export default function CameraPage() {
       }
       if (videoRef.current) {
         videoRef.current.srcObject = null;
-        videoRef.current.onloadedmetadata = null;
       }
     };
   }, []);
+
+  // Attach media stream to video element when it becomes available
+  // This handles the case where the video element is re-created after conditional rendering
+  useEffect(() => {
+    if (videoRef.current && mediaStreamRef.current) {
+      console.log('[Camera] Video element available, attaching media stream');
+      videoRef.current.srcObject = mediaStreamRef.current;
+      setCameraReady(true);
+    }
+  }, [showPreview]); // Run when showPreview changes (video element re-appears)
 
   const handleCapture = async () => {
     console.log('[Camera] handleCapture called, cameraReady:', cameraReady, 'videoRef:', !!videoRef.current);
@@ -220,13 +222,6 @@ export default function CameraPage() {
         setPreviewImage(null);
         // Reset countdown to re-enable the CAPTURE button
         setCountdown(null);
-        // Restart video playback after video element re-appears
-        setTimeout(() => {
-          if (videoRef.current) {
-            console.log('[Camera] Restarting video playback');
-            videoRef.current.play().catch(err => console.error('[Camera] Failed to play video:', err));
-          }
-        }, 0);
       }
     }
   };
@@ -237,13 +232,6 @@ export default function CameraPage() {
     setPreviewImage(null);
     // Reset countdown to re-enable the CAPTURE button
     setCountdown(null);
-    // Restart video playback after video element re-appears
-    setTimeout(() => {
-      if (videoRef.current) {
-        console.log('[Camera] Restarting video playback');
-        videoRef.current.play().catch(err => console.error('[Camera] Failed to play video:', err));
-      }
-    }, 0);
   };
 
   const handleSkip = async () => {
