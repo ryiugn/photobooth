@@ -25,6 +25,7 @@ export default function CameraPage() {
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [sessionId] = useState(`session_${Date.now()}`);
   const [cameraError, setCameraError] = useState(false);
+  const [cameraReady, setCameraReady] = useState(false);
 
   // Use ref to track media stream for cleanup (avoiding React.StrictMode double-mount issues)
   const mediaStreamRef = useRef<MediaStream | null>(null);
@@ -36,6 +37,7 @@ export default function CameraPage() {
     const initializeCamera = async () => {
       try {
         console.log('[Camera] Initializing camera...');
+        setCameraReady(false);
         const mediaStream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: 'user',
@@ -54,13 +56,21 @@ export default function CameraPage() {
         mediaStreamRef.current = mediaStream;
         if (videoRef.current) {
           videoRef.current.srcObject = mediaStream;
-          console.log('[Camera] Camera initialized successfully');
+
+          // Wait for video to be ready
+          videoRef.current.onloadedmetadata = () => {
+            console.log('[Camera] Video metadata loaded, camera ready');
+            if (isComponentMounted) {
+              setCameraReady(true);
+            }
+          };
         }
         setCameraError(false);
       } catch (err) {
         console.error('[Camera] Camera access error:', err);
         if (isComponentMounted) {
           setCameraError(true);
+          setCameraReady(false);
         }
       }
     };
@@ -70,6 +80,7 @@ export default function CameraPage() {
     // Cleanup on unmount
     return () => {
       isComponentMounted = false;
+      setCameraReady(false);
       if (mediaStreamRef.current) {
         console.log('[Camera] Cleaning up camera stream');
         mediaStreamRef.current.getTracks().forEach((track) => track.stop());
@@ -77,13 +88,24 @@ export default function CameraPage() {
       }
       if (videoRef.current) {
         videoRef.current.srcObject = null;
+        videoRef.current.onloadedmetadata = null;
       }
     };
   }, []);
 
   const handleCapture = async () => {
-    console.log('[Camera] handleCapture called, countdown:', countdown);
-    if (!videoRef.current) return;
+    console.log('[Camera] handleCapture called, cameraReady:', cameraReady, 'videoRef:', !!videoRef.current);
+    if (!videoRef.current) {
+      console.error('[Camera] Cannot capture: videoRef is null');
+      alert('Camera not ready. Please wait for the camera to initialize.');
+      return;
+    }
+
+    if (!cameraReady) {
+      console.error('[Camera] Cannot capture: camera not ready');
+      alert('Camera is still initializing. Please wait a moment and try again.');
+      return;
+    }
 
     // Start countdown
     console.log('[Camera] Starting countdown...');
@@ -397,6 +419,19 @@ export default function CameraPage() {
           }}
         >
           📁 UPLOAD PHOTO
+        </button>
+      ) : !cameraReady ? (
+        /* Show loading state while camera initializes */
+        <button
+          disabled
+          className="btn btn-primary"
+          style={{
+            fontSize: 'var(--font-size-xl)',
+            padding: 'var(--spacing-md) var(--spacing-xl)',
+            opacity: 0.6,
+          }}
+        >
+          ⏳ STARTING CAMERA...
         </button>
       ) : (
         <button
