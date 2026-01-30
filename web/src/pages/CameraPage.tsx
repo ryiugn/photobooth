@@ -164,7 +164,7 @@ export default function CameraPage() {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Draw video frame to canvas
+    // Draw video frame to canvas (NOT mirrored - we want the actual photo)
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
     // Get current frame URL
@@ -397,7 +397,11 @@ export default function CameraPage() {
           <img
             src={previewImage || ''}
             alt="Captured"
-            style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: 'contain',
+            }}
           />
         ) : cameraError ? (
           /* Camera Error State */
@@ -428,7 +432,12 @@ export default function CameraPage() {
               autoPlay
               muted
               playsInline
-              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+              style={{
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover',
+                transform: 'scaleX(-1)', // Mirror the video horizontally
+              }}
             />
             {/* Frame overlay */}
             {currentFrame && (
@@ -442,7 +451,7 @@ export default function CameraPage() {
                   width: '100%',
                   height: '100%',
                   pointerEvents: 'none',
-                  objectFit: 'contain',
+                  objectFit: 'cover', // Use 'cover' to match backend composition logic
                   opacity: 0.8,
                 }}
               />

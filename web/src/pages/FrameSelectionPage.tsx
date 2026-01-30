@@ -77,6 +77,7 @@ export default function FrameSelectionPage() {
       // Get frame IDs from selected frames
       const frameIds = selectedFrames.map((f) => {
         const frameUrl = f![0];
+        const frameName = f![1];
 
         // Check if it's a custom frame (data URL starts with 'data:')
         if (frameUrl.startsWith('data:')) {
@@ -86,17 +87,22 @@ export default function FrameSelectionPage() {
             return customFrame.id;
           }
           // Fallback: try to find by name
-          const customFrameByName = customFrames.find(cf => cf.name === f![1]);
+          const customFrameByName = customFrames.find(cf => cf.name === frameName);
           if (customFrameByName) {
             return customFrameByName.id;
           }
+          // Last resort: generate a stable ID from the data URL
+          return `custom_${btoa(frameUrl.substring(0, 32)).replace(/[^a-zA-Z0-9]/g, '')}`;
         }
 
-        // For built-in frames, extract ID from URL
-        // URL format varies by deployment (e.g., https://<project>.vercel.app/frames/frame_simple.png)
-        // The code dynamically extracts the filename from any URL format
+        // For built-in frames, find by URL in availableFrames to get the proper ID
+        const matchingFrame = availableFrames.find(af => af.url === frameUrl || af.url.includes(frameUrl));
+        if (matchingFrame) {
+          return matchingFrame.id;
+        }
+
+        // Fallback: extract filename from URL and use as ID
         const filename = frameUrl.split('/').pop() || '';
-        // Remove extension to get frame ID
         return filename.replace(/\.[^/.]+$/, '');
       });
 

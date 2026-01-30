@@ -53,7 +53,9 @@ export default function TemplateManagerPage() {
     };
 
     loadData();
-  }, [setTemplates, availableFrames, setAvailableFrames]);
+    // Only run on mount - remove availableFrames from dependencies to prevent re-running
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleUseTemplate = () => {
     if (!selectedTemplate) return;
@@ -67,10 +69,18 @@ export default function TemplateManagerPage() {
     selectedTemplate.frames.forEach((frameId, index) => {
       console.log(`[Template] Loading slot ${index}, frameId: ${frameId}`);
 
-      // First try to find in built-in frames
+      // First try to find in built-in frames by exact ID match
       let frame = availableFrames.find(f => f.id === frameId);
 
-      // If not found, try custom frames
+      // If not found, try matching by URL filename (for backward compatibility)
+      if (!frame) {
+        frame = availableFrames.find(f => {
+          const urlFilename = f.url.split('/').pop()?.replace(/\.[^/.]+$/, '');
+          return urlFilename === frameId || f.url.includes(frameId);
+        });
+      }
+
+      // If still not found, try custom frames
       if (!frame) {
         console.log(`[Template] Frame ${frameId} not found in available frames, checking custom frames`);
         const customFrame = customFrames.find(cf => cf.id === frameId);
