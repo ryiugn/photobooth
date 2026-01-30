@@ -82,17 +82,21 @@ export default function CameraPage() {
   }, []);
 
   const handleCapture = async () => {
+    console.log('[Camera] handleCapture called, countdown:', countdown);
     if (!videoRef.current) return;
 
     // Start countdown
+    console.log('[Camera] Starting countdown...');
     setCountdown(3);
   };
 
   // Handle countdown timer
   useEffect(() => {
+    console.log('[Camera] Countdown useEffect triggered, countdown:', countdown);
     if (countdown === null) return;
 
     if (countdown === 0) {
+      console.log('[Camera] Countdown reached 0, capturing photo...');
       // Capture photo
       capturePhoto();
       return;
@@ -117,6 +121,7 @@ export default function CameraPage() {
   }, [showPreview]);
 
   const capturePhoto = async () => {
+    console.log('[Camera] capturePhoto called, videoRef:', !!videoRef.current, 'canvasRef:', !!canvasRef.current);
     if (!videoRef.current || !canvasRef.current) return;
 
     const video = videoRef.current;
@@ -137,6 +142,8 @@ export default function CameraPage() {
     if (!currentFrameUrl) {
       console.error('[Capture] No frame selected for photo', currentPhotoIndex);
       alert('No frame selected. Please go back and select frames.');
+      // Reset countdown on error
+      setCountdown(null);
       return;
     }
 
@@ -147,6 +154,8 @@ export default function CameraPage() {
       if (!blob) {
         console.error('[Capture] Failed to create blob from canvas');
         alert('Failed to capture photo');
+        // Reset countdown on error
+        setCountdown(null);
         return;
       }
 
@@ -166,29 +175,39 @@ export default function CameraPage() {
       } catch (err) {
         console.error('[Capture] Capture error:', err);
         alert('Failed to capture photo. Please try again.');
+        // Reset countdown on error
+        setCountdown(null);
       }
     }, 'image/png');
   };
 
   const handleKeep = () => {
+    console.log('[Camera] handleKeep called, currentPhotoIndex:', currentPhotoIndex, 'countdown:', countdown);
     if (previewImage) {
       addCapturedPhoto(previewImage);
 
       // Check if all photos captured
       if (currentPhotoIndex + 1 >= 4) {
+        console.log('[Camera] All photos captured, navigating to reveal');
         // Navigate to composition
         navigate('/reveal');
       } else {
+        console.log('[Camera] Resetting for next photo');
         // Reset for next photo
         setShowPreview(false);
         setPreviewImage(null);
+        // Reset countdown to re-enable the CAPTURE button
+        setCountdown(null);
       }
     }
   };
 
   const handleRetake = () => {
+    console.log('[Camera] handleRetake called');
     setShowPreview(false);
     setPreviewImage(null);
+    // Reset countdown to re-enable the CAPTURE button
+    setCountdown(null);
   };
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
