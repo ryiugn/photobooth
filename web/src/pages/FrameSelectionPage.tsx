@@ -93,7 +93,8 @@ export default function FrameSelectionPage() {
         }
 
         // For built-in frames, extract ID from URL
-        // URL format: https://photoboothf.vercel.app/frames/frame_simple.png
+        // URL format varies by deployment (e.g., https://<project>.vercel.app/frames/frame_simple.png)
+        // The code dynamically extracts the filename from any URL format
         const filename = frameUrl.split('/').pop() || '';
         // Remove extension to get frame ID
         return filename.replace(/\.[^/.]+$/, '');

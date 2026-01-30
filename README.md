@@ -2,7 +2,40 @@
 
 A photobooth application with PIN authentication, per-photo frame selection, and photostrip generation. Available as both a **PyQt5 Desktop App** and a **Web Application**.
 
+> **IMPORTANT:** This project is primarily designed for **deployment on Vercel**, not as a local application. Deployment URLs change with each deploy. Always use the Vercel CLI to check current deployment URLs before updating environment variables.
+
 **Repository:** https://github.com/ryiugn/photobooth
+
+---
+
+## Checking Deployment URLs (REQUIRED)
+
+**Before updating environment variables or making API changes, always check the current deployment URLs using the Vercel CLI:**
+
+```bash
+# Check API backend deployments
+cd api
+vercel list --yes
+
+# Check web frontend deployments
+cd ../web
+vercel list --yes
+```
+
+The output shows the latest production URLs, for example:
+```
+> Deployments for ryiugns-projects/api
+
+  Age     Deployment                                            Status      Environment
+  19h     https://api-dbay0rn5r-ryiugns-projects.vercel.app     ● Ready     Production
+```
+
+**After any deployment, always:**
+1. Run `vercel list --yes` to get the new URLs
+2. Update environment variables with the new URLs
+3. Redeploy if needed to propagate URL changes
+
+See [Vercel Deployment](#deploy-to-vercel) section for details.
 
 ---
 
@@ -197,6 +230,20 @@ Frontend will be available at: **http://localhost:5173**
 
 ## Deploy to Vercel
 
+> **CRITICAL:** Deployment URLs change with each deployment on Vercel. After deploying, **always** use `vercel list --yes` to get the current production URLs before updating environment variables.
+
+### Checking Current Deployment URLs
+
+```bash
+# From the api directory
+cd api
+vercel list --yes
+
+# From the web directory
+cd ../web
+vercel list --yes
+```
+
 ### Option 1: Automatic Deployment via Vercel Dashboard
 
 **Step 1: Deploy Backend**
@@ -252,13 +299,24 @@ VITE_API_URL=http://localhost:8000/api/v1
 ```
 
 **Production (Vercel):**
+
+**IMPORTANT:** URLs change with each deployment. Always check current URLs with:
+```bash
+# Check current API URL
+cd api && vercel list --yes
+
+# Check current Web URL
+cd web && vercel list --yes
+```
+
+Then use the current production URLs:
 ```bash
 # Backend (Vercel env vars)
 JWT_SECRET=xK7mN9pL2vR8sT4wQ6yH3jF5dD8gV1nB2cM6kP (generate your own 32-char string)
-FRONTEND_URL=https://photobooth-web.vercel.app (your actual frontend domain)
+FRONTEND_URL=https://<current-web-deployment>.vercel.app (your actual frontend domain)
 
 # Frontend (Vercel env vars)
-VITE_API_URL=https://photobooth-api.vercel.app/api/v1 (your actual backend domain)
+VITE_API_URL=https://<current-api-deployment>.vercel.app/api/v1 (your actual backend domain)
 ```
 
 ### Option 2: Deploy via GitHub CLI
