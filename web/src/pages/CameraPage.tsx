@@ -246,6 +246,68 @@ export default function CameraPage() {
     }, 0);
   };
 
+  const handleSkip = async () => {
+    console.log('[Camera] handleSkip called, currentPhotoIndex:', currentPhotoIndex);
+
+    // Get current frame URL
+    const currentFrameUrl = selectedFrames[currentPhotoIndex]?.[0];
+    if (!currentFrameUrl) {
+      console.error('[Capture] No frame selected for photo', currentPhotoIndex);
+      alert('No frame selected. Please go back and select frames.');
+      return;
+    }
+
+    try {
+      // Create a blank white image (1280x720)
+      const blankCanvas = document.createElement('canvas');
+      blankCanvas.width = 1280;
+      blankCanvas.height = 720;
+      const ctx = blankCanvas.getContext('2d');
+      if (ctx) {
+        // Fill with white background
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, blankCanvas.width, blankCanvas.height);
+      }
+
+      // Convert to blob
+      blankCanvas.toBlob(async (blob) => {
+        if (!blob) {
+          console.error('[Capture] Failed to create blank image');
+          alert('Failed to create blank image');
+          return;
+        }
+
+        try {
+          // Send blank image to backend for frame application
+          const response = await apiService.capturePhoto(
+            blob,
+            currentFrameUrl,
+            currentPhotoIndex,
+            sessionId
+          );
+
+          console.log('[Capture] Blank photo with frame created successfully');
+          // Add directly to captured photos (don't show preview)
+          addCapturedPhoto(response.framed_photo);
+
+          // Check if all photos captured
+          if (currentPhotoIndex + 1 >= 4) {
+            console.log('[Camera] All photos captured, navigating to reveal');
+            // Navigate to composition
+            navigate('/reveal');
+          }
+          // If not all photos captured, the component will re-render with updated currentPhotoIndex
+        } catch (err) {
+          console.error('[Capture] Skip error:', err);
+          alert('Failed to process blank photo. Please try again.');
+        }
+      }, 'image/png');
+    } catch (err) {
+      console.error('[Capture] Skip error:', err);
+      alert('Failed to create blank photo. Please try again.');
+    }
+  };
+
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -423,17 +485,29 @@ export default function CameraPage() {
           </button>
         </div>
       ) : cameraError ? (
-        /* Show upload button when camera failed */
-        <button
-          onClick={() => fileInputRef.current?.click()}
-          className="btn btn-primary"
-          style={{
-            fontSize: 'var(--font-size-xl)',
-            padding: 'var(--spacing-md) var(--spacing-xl)',
-          }}
-        >
-          📁 UPLOAD PHOTO
-        </button>
+        /* Show upload and skip buttons when camera failed */
+        <div style={{ display: 'flex', gap: 'var(--spacing-md)' }}>
+          <button
+            onClick={handleSkip}
+            className="btn btn-secondary"
+            style={{
+              fontSize: 'var(--font-size-xl)',
+              padding: 'var(--spacing-md) var(--spacing-xl)',
+            }}
+          >
+            SKIP →
+          </button>
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="btn btn-primary"
+            style={{
+              fontSize: 'var(--font-size-xl)',
+              padding: 'var(--spacing-md) var(--spacing-xl)',
+            }}
+          >
+            📁 UPLOAD PHOTO
+          </button>
+        </div>
       ) : !cameraReady ? (
         /* Show loading state while camera initializes */
         <button
@@ -448,17 +522,29 @@ export default function CameraPage() {
           ⏳ STARTING CAMERA...
         </button>
       ) : (
-        <button
-          onClick={handleCapture}
-          disabled={countdown !== null}
-          className="btn btn-primary"
-          style={{
-            fontSize: 'var(--font-size-xl)',
-            padding: 'var(--spacing-md) var(--spacing-xl)',
-          }}
-        >
-          📷 CAPTURE
-        </button>
+        <div style={{ display: 'flex', gap: 'var(--spacing-md)' }}>
+          <button
+            onClick={handleSkip}
+            className="btn btn-secondary"
+            style={{
+              fontSize: 'var(--font-size-xl)',
+              padding: 'var(--spacing-md) var(--spacing-xl)',
+            }}
+          >
+            SKIP →
+          </button>
+          <button
+            onClick={handleCapture}
+            disabled={countdown !== null}
+            className="btn btn-primary"
+            style={{
+              fontSize: 'var(--font-size-xl)',
+              padding: 'var(--spacing-md) var(--spacing-xl)',
+            }}
+          >
+            📷 CAPTURE
+          </button>
+        </div>
       )}
     </div>
   );
