@@ -66,7 +66,7 @@ async def apply_frame_from_bytes(photo_data: bytes, frame_data: bytes) -> bytes:
     # Scale frame to cover photo
     scaled_frame_width = int(frame_width * scale)
     scaled_frame_height = int(frame_height * scale)
-    frame_scaled = frame.resize((scaled_frame_width, scaled_frame_height), Image.Resampling.LANCZOS)
+    frame_scaled = frame.resize((scaled_frame_width, scaled_frame_height), Image.Resampling.BILINEAR)
 
     # Crop frame to match photo dimensions (center crop)
     crop_x = (scaled_frame_width - photo_width) // 2
@@ -80,7 +80,7 @@ async def apply_frame_from_bytes(photo_data: bytes, frame_data: bytes) -> bytes:
 
     final_photo_width = int(photo_pil.width * photo_scale)
     final_photo_height = int(photo_pil.height * photo_scale)
-    photo_scaled = photo_pil.resize((final_photo_width, final_photo_height), Image.Resampling.LANCZOS)
+    photo_scaled = photo_pil.resize((final_photo_width, final_photo_height), Image.Resampling.BILINEAR)
 
     # Center photo on canvas
     photo_x = (photo_width - final_photo_width) // 2

@@ -157,15 +157,43 @@ export default function CameraPage() {
     const video = videoRef.current;
     const canvas = canvasRef.current;
 
-    // Set canvas size to match video
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    // Get the displayed dimensions of the video element (what user sees)
+    // The container has maxWidth: 640px and aspectRatio: 4/3 (height = 480px)
+    const displayedWidth = 640;
+    const displayedHeight = 480;
+
+    // Calculate the crop region to match objectFit: 'cover'
+    // objectFit: 'cover' scales the video to cover the entire container and centers it
+    const videoAspect = video.videoWidth / video.videoHeight;
+    const displayAspect = displayedWidth / displayedHeight;
+
+    let sourceX = 0, sourceY = 0, sourceWidth = video.videoWidth, sourceHeight = video.videoHeight;
+
+    if (videoAspect > displayAspect) {
+      // Video is wider than display - crop the sides
+      sourceWidth = video.videoHeight * displayAspect;
+      sourceX = (video.videoWidth - sourceWidth) / 2;
+    } else {
+      // Video is taller than display - crop the top/bottom
+      sourceHeight = video.videoWidth / displayAspect;
+      sourceY = (video.videoHeight - sourceHeight) / 2;
+    }
+
+    console.log('[Camera] Capturing with crop:', {
+      videoSize: `${video.videoWidth}x${video.videoHeight}`,
+      displaySize: `${displayedWidth}x${displayedHeight}`,
+      cropRegion: `${Math.round(sourceX)},${Math.round(sourceY)},${Math.round(sourceWidth)}x${Math.round(sourceHeight)}`
+    });
+
+    // Set canvas size to match displayed size (not full video resolution)
+    canvas.width = displayedWidth;
+    canvas.height = displayedHeight;
 
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Draw video frame to canvas (NOT mirrored - we want the actual photo)
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    // Draw only the cropped region that matches what the user sees in preview
+    ctx.drawImage(video, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, displayedWidth, displayedHeight);
 
     // Get current frame URL
     const currentFrameUrl = selectedFrames[currentPhotoIndex]?.[0];
