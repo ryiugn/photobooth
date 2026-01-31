@@ -79,6 +79,13 @@ export interface ComposeResponse {
   download_url: string;
 }
 
+// Sharing types
+export interface ShareResponse {
+  strip_id: string;
+  share_url: string;
+  expires_at: string;
+}
+
 // App state
 export interface AppState {
   // Authentication

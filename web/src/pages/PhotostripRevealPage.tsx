@@ -1,15 +1,19 @@
 /**
- * Photostrip Reveal Page - Display final photostrip with download/print options
+ * Photostrip Reveal Page - Display final photostrip with download/print/share options
  */
 
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../state/store';
+import { apiService } from '../services/api';
 
 export default function PhotostripRevealPage() {
   const navigate = useNavigate();
   const { capturedPhotos, selectedFrames, finalPhotostrip, setFinalPhotostrip, resetCapture } = useAppStore();
   const [isComposing, setIsComposing] = useState(true);
+  const [isUploading, setIsUploading] = useState(false);
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   // Compose photostrip on mount (client-side)
   useEffect(() => {
@@ -60,6 +64,9 @@ export default function PhotostripRevealPage() {
         console.log('[Composition] Photostrip composed successfully (client-side)');
 
         setFinalPhotostrip(dataUrl);
+
+        // Upload to cloud in background (non-blocking)
+        uploadToCloud(dataUrl);
       } catch (err) {
         console.error('[Composition] Composition error:', err);
         alert('Failed to compose photostrip');
@@ -74,6 +81,25 @@ export default function PhotostripRevealPage() {
       setIsComposing(false);
     }
   }, [capturedPhotos, finalPhotostrip, setFinalPhotostrip]);
+
+  // Upload photostrip to cloud (async, non-blocking)
+  const uploadToCloud = async (dataUrl: string) => {
+    try {
+      console.log('[Sharing] Uploading photostrip to cloud...');
+      setIsUploading(true);
+      setUploadError(null);
+
+      const response = await apiService.uploadPhotostrip(dataUrl);
+
+      console.log('[Sharing] Upload successful:', response.share_url);
+      setShareUrl(response.share_url);
+    } catch (err) {
+      console.error('[Sharing] Upload error:', err);
+      setUploadError('Failed to create share link. You can still download the photostrip.');
+    } finally {
+      setIsUploading(false);
+    }
+  };
 
   const handleDownload = () => {
     if (!finalPhotostrip) return;
@@ -100,6 +126,18 @@ export default function PhotostripRevealPage() {
   const handleRetake = () => {
     resetCapture();
     navigate('/frames');
+  };
+
+  const handleShare = () => {
+    if (!shareUrl) return;
+
+    // Copy share URL to clipboard
+    navigator.clipboard.writeText(shareUrl).then(() => {
+      alert('Share link copied to clipboard!');
+    }).catch(() => {
+      // Fallback: show the link
+      prompt('Copy this share link:', shareUrl);
+    });
   };
 
   if (isComposing) {
@@ -131,6 +169,31 @@ export default function PhotostripRevealPage() {
       {/* Header */}
       <h1 style={{ marginBottom: 'var(--spacing-xl)' }}>YOUR PHOTOSTRIP!</h1>
 
+      {/* Upload Status */}
+      {isUploading && (
+        <div style={{
+          padding: 'var(--spacing-sm) var(--spacing-md)',
+          backgroundColor: 'rgba(255, 193, 7, 0.2)',
+          borderRadius: 'var(--border-radius-sm)',
+          marginBottom: 'var(--spacing-md)',
+          fontSize: 'var(--font-size-sm)',
+        }}>
+          🔗 Creating share link...
+        </div>
+      )}
+
+      {uploadError && (
+        <div style={{
+          padding: 'var(--spacing-sm) var(--spacing-md)',
+          backgroundColor: 'rgba(244, 67, 54, 0.2)',
+          borderRadius: 'var(--border-radius-sm)',
+          marginBottom: 'var(--spacing-md)',
+          fontSize: 'var(--font-size-sm)',
+        }}>
+          ⚠️ {uploadError}
+        </div>
+      )}
+
       {/* Photostrip Display */}
       {finalPhotostrip && (
         <img
@@ -160,6 +223,29 @@ export default function PhotostripRevealPage() {
         >
           💾 DOWNLOAD
         </button>
+
+        {shareUrl ? (
+          <button
+            onClick={handleShare}
+            className="btn btn-primary"
+            style={{ fontSize: 'var(--font-size-lg)' }}
+            title={shareUrl}
+          >
+            🔗 SHARE
+          </button>
+        ) : isUploading ? (
+          <button
+            disabled
+            className="btn"
+            style={{
+              fontSize: 'var(--font-size-lg)',
+              opacity: 0.6,
+              cursor: 'not-allowed',
+            }}
+          >
+            🔗 UPLOADING...
+          </button>
+        ) : null}
 
         <button
           onClick={handlePrint}

@@ -151,6 +151,19 @@ class ApiService {
     });
     return response.data;
   }
+
+  // Sharing
+  async uploadPhotostrip(imageData: string): Promise<{ strip_id: string; share_url: string; expires_at: string }> {
+    const response = await this.client.post<{ strip_id: string; share_url: string; expires_at: string }>('/sharing/upload', {
+      image_data: imageData,
+    });
+    return response.data;
+  }
+
+  async getPhotostrip(stripId: string): Promise<{ strip_id: string; image_data: string; created_at: string; expires_at: string }> {
+    const response = await this.client.get<{ strip_id: string; image_data: string; created_at: string; expires_at: string }>(`/sharing/${stripId}`);
+    return response.data;
+  }
 }
 
 // Export singleton instance

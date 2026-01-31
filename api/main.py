@@ -59,13 +59,14 @@ async def root():
     }
 
 # Import and include routers
-from routes import auth, frames, templates, camera, composition
+from routes import auth, frames, templates, camera, composition, sharing
 
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["Authentication"])
 app.include_router(frames.router, prefix="/api/v1/frames", tags=["Frames"])
 app.include_router(templates.router, prefix="/api/v1/templates", tags=["Templates"])
 app.include_router(camera.router, prefix="/api/v1/camera", tags=["Camera"])
 app.include_router(composition.router, prefix="/api/v1/composition", tags=["Composition"])
+app.include_router(sharing.router, prefix="/api/v1/sharing", tags=["Sharing"])
 
 
 # Vercel serverless entry point
