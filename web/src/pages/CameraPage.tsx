@@ -192,8 +192,15 @@ export default function CameraPage() {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
+    // Mirror horizontally to match the preview (transform: scaleX(-1))
+    ctx.translate(displayedWidth, 0);
+    ctx.scale(-1, 1);
+
     // Draw only the cropped region that matches what the user sees in preview
     ctx.drawImage(video, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, displayedWidth, displayedHeight);
+
+    // Reset transform
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
 
     // Get current frame URL
     const currentFrameUrl = selectedFrames[currentPhotoIndex]?.[0];
