@@ -199,7 +199,7 @@ export default function CameraPage() {
     // Draw only the cropped region that matches what the user sees in preview
     ctx.drawImage(video, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, displayedWidth, displayedHeight);
 
-    // Reset transform
+    // Reset transform before drawing frame
     ctx.setTransform(1, 0, 0, 1, 0, 0);
 
     // Get current frame URL
@@ -212,38 +212,50 @@ export default function CameraPage() {
       return;
     }
 
-    console.log('[Capture] Capturing photo with frame:', currentFrameUrl);
+    console.log('[Capture] Capturing photo with frame (client-side):', currentFrameUrl);
 
-    // Convert to blob
-    canvas.toBlob(async (blob) => {
-      if (!blob) {
-        console.error('[Capture] Failed to create blob from canvas');
-        alert('Failed to capture photo');
-        // Reset countdown on error
-        setCountdown(null);
-        return;
+    // Load frame image and apply overlay client-side
+    const frameImg = new Image();
+    frameImg.crossOrigin = 'anonymous';
+    frameImg.onload = () => {
+      // Draw frame overlay with same cover logic as preview
+      const frameAspect = frameImg.width / frameImg.height;
+      let drawX = 0, drawY = 0, drawWidth = displayedWidth, drawHeight = displayedHeight;
+
+      if (frameAspect > displayAspect) {
+        // Frame is wider - crop sides
+        drawWidth = displayedHeight * frameAspect;
+        drawX = (displayedWidth - drawWidth) / 2;
+      } else {
+        // Frame is taller - crop top/bottom
+        drawHeight = displayedWidth / frameAspect;
+        drawY = (displayedHeight - drawHeight) / 2;
       }
 
-      try {
-        // Send to backend for frame application
-        const response = await apiService.capturePhoto(
-          blob,
-          currentFrameUrl,
-          currentPhotoIndex,
-          sessionId
-        );
+      // Draw frame with transparency
+      ctx.globalAlpha = 0.8;
+      ctx.drawImage(frameImg, drawX, drawY, drawWidth, drawHeight);
+      ctx.globalAlpha = 1.0;
 
-        console.log('[Capture] Photo captured successfully');
-        // Show preview
-        setPreviewImage(response.framed_photo);
-        setShowPreview(true);
-      } catch (err) {
-        console.error('[Capture] Capture error:', err);
-        alert('Failed to capture photo. Please try again.');
-        // Reset countdown on error
-        setCountdown(null);
-      }
-    }, 'image/png');
+      // Convert to data URL for preview (instant, no API call)
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+      console.log('[Capture] Photo captured with frame (client-side)', dataUrl.length);
+
+      // Show preview immediately
+      setPreviewImage(dataUrl);
+      setShowPreview(true);
+    };
+
+    frameImg.onerror = () => {
+      console.error('[Capture] Failed to load frame image:', currentFrameUrl);
+      alert('Failed to load frame. Using photo without frame.');
+      // Show photo without frame
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+      setPreviewImage(dataUrl);
+      setShowPreview(true);
+    };
+
+    frameImg.src = currentFrameUrl;
   };
 
   const handleKeep = () => {

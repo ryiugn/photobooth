@@ -5,28 +5,61 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../state/store';
-import { apiService } from '../services/api';
 
 export default function PhotostripRevealPage() {
   const navigate = useNavigate();
   const { capturedPhotos, selectedFrames, finalPhotostrip, setFinalPhotostrip, resetCapture } = useAppStore();
   const [isComposing, setIsComposing] = useState(true);
-  const [sessionId] = useState(`session_${Date.now()}`);
 
-  // Compose photostrip on mount
+  // Compose photostrip on mount (client-side)
   useEffect(() => {
     const composeStrip = async () => {
       try {
-        console.log('[Composition] Composing photostrip from', capturedPhotos.length, 'photos');
+        console.log('[Composition] Composing photostrip from', capturedPhotos.length, 'photos (client-side)');
 
-        // The photos are already framed from capture endpoint
-        // Just send them to be stitched together
-        const response = await apiService.composePhotostrip({
-          photos: capturedPhotos,
+        if (capturedPhotos.length !== 4) {
+          throw new Error(`Expected 4 photos, got ${capturedPhotos.length}`);
+        }
+
+        // Client-side composition: load images and compose on canvas
+        const STRIP_WIDTH = 640;
+        const PHOTO_HEIGHT = 480;
+        const SPACING = 20;
+        const stripHeight = (PHOTO_HEIGHT * 4) + (SPACING * 5);
+
+        const canvas = document.createElement('canvas');
+        canvas.width = STRIP_WIDTH;
+        canvas.height = stripHeight;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) throw new Error('Failed to get canvas context');
+
+        // White background
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, STRIP_WIDTH, stripHeight);
+
+        // Load all photos and draw them
+        const loadImage = (src: string): Promise<HTMLImageElement> => {
+          return new Promise((resolve, reject) => {
+            const img = new Image();
+            img.onload = () => resolve(img);
+            img.onerror = reject;
+            img.src = src;
+          });
+        };
+
+        const photos = await Promise.all(capturedPhotos.map(loadImage));
+
+        // Draw each photo vertically
+        photos.forEach((photo, index) => {
+          const y = SPACING + (PHOTO_HEIGHT + SPACING) * index;
+          ctx.drawImage(photo, 0, y, STRIP_WIDTH, PHOTO_HEIGHT);
         });
 
-        console.log('[Composition] Photostrip composed successfully');
-        setFinalPhotostrip(response.photostrip_base64);
+        // Convert to data URL
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+        console.log('[Composition] Photostrip composed successfully (client-side)');
+
+        setFinalPhotostrip(dataUrl);
       } catch (err) {
         console.error('[Composition] Composition error:', err);
         alert('Failed to compose photostrip');
