@@ -116,6 +116,26 @@ async def list_frames(user: dict = Depends(get_current_user)):
             "id": "custom_jhmwdz",
             "name": "Custom Jhmwdz",
             "filename": "custom_20260127_210302_jhmwdz.PNG"
+        },
+        {
+            "id": "frame_3283",
+            "name": "Frame 3283",
+            "filename": "IMG_3283 2.PNG"
+        },
+        {
+            "id": "frame_3284",
+            "name": "Frame 3284",
+            "filename": "IMG_3284 2.PNG"
+        },
+        {
+            "id": "frame_3285",
+            "name": "Frame 3285",
+            "filename": "IMG_3285 2.PNG"
+        },
+        {
+            "id": "frame_3286",
+            "name": "Frame 3286",
+            "filename": "IMG_3286 2.PNG"
         }
     ]
 
