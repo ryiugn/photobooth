@@ -2,6 +2,8 @@
 
 A photobooth application with PIN authentication, per-photo frame selection, and photostrip generation. Available as both a **PyQt5 Desktop App** and a **Web Application**.
 
+> **DEPLOYMENT POLICY:** Use **Vercel CLI** for all deployments unless errors occur. See [Deploy to Vercel](#deploy-to-vercel) for details.
+>
 > **IMPORTANT:** This project is primarily designed for **deployment on Vercel**, not as a local application. Deployment URLs change with each deploy. Always use the Vercel CLI to check current deployment URLs before updating environment variables.
 
 **Repository:** https://github.com/ryiugn/photobooth
@@ -10,7 +12,9 @@ A photobooth application with PIN authentication, per-photo frame selection, and
 
 ## Checking Deployment URLs (REQUIRED)
 
-**Before updating environment variables or making API changes, always check the current deployment URLs using the Vercel CLI:**
+> **USE VERCEL CLI FOR ALL DEPLOYMENT OPERATIONS**
+>
+> Before updating environment variables or making API changes, always check the current deployment URLs using the Vercel CLI:
 
 ```bash
 # Check API backend deployments
@@ -230,21 +234,43 @@ Frontend will be available at: **http://localhost:5173**
 
 ## Deploy to Vercel
 
+> **DEPLOYMENT POLICY: USE VERCEL CLI**
+>
+> **ALWAYS use Vercel CLI for deployments** unless you encounter errors. The Vercel Dashboard automatic deployment is configured as a backup method only.
+>
+> **Reason:** Vercel CLI provides better control, immediate feedback, and proper project linking for this monorepo structure.
+
 > **CRITICAL:** Deployment URLs change with each deployment on Vercel. After deploying, **always** use `vercel list --yes` to get the current production URLs before updating environment variables.
 
-### Checking Current Deployment URLs
+### Standard Deployment Procedure (Vercel CLI)
 
+**Step 1: Deploy Backend**
 ```bash
-# From the api directory
 cd api
+vercel --prod --yes
+```
+
+**Step 2: Deploy Frontend**
+```bash
+cd ../web
+vercel --prod --yes
+```
+
+**Step 3: Get Current Deployment URLs**
+```bash
+# Check API URL
+cd ../api
 vercel list --yes
 
-# From the web directory
+# Check Web URL
 cd ../web
 vercel list --yes
 ```
 
-### Option 1: Automatic Deployment via Vercel Dashboard
+**Step 4: Update Environment Variables if Needed**
+If the deployment URLs have changed, update environment variables in Vercel Dashboard or via CLI, then redeploy.
+
+### Checking Current Deployment URLs
 
 **Step 1: Deploy Backend**
 1. Go to https://vercel.com/new
@@ -319,7 +345,9 @@ FRONTEND_URL=https://<current-web-deployment>.vercel.app (your actual frontend d
 VITE_API_URL=https://<current-api-deployment>.vercel.app/api/v1 (your actual backend domain)
 ```
 
-### Option 2: Deploy via GitHub CLI
+### Backup Method: Vercel Dashboard Automatic Deployment
+
+> **ONLY use this method if Vercel CLI fails.** Vercel CLI is the recommended deployment method for this project.
 
 ```bash
 # Install GitHub CLI (if not installed)
