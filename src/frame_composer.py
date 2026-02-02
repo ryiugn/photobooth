@@ -142,26 +142,78 @@ def apply_frame(photo: np.ndarray, frame_path: str) -> Image.Image:
     final_photo_height = int(rgb_photo.height * photo_scale)
     photo_scaled = rgb_photo.resize((final_photo_width, final_photo_height), Image.Resampling.BILINEAR)
 
-    # Create a white background for the frame (to make semi-transparent areas opaque)
-    frame_with_opaque_bg = Image.new("RGBA", frame_cropped.size, (255, 255, 255, 255))
+    # Detect the dark "camera view" area and make everything else opaque
+    # This works even if the frame has no transparency - it finds dark center regions
+    import numpy as np
 
-    # Paste the frame onto the white background, but ONLY keep fully transparent areas as holes
-    # Pixels with alpha < 128 are considered "cutout" (transparent)
-    # Pixels with alpha >= 128 become fully opaque
-    frame_data = frame_cropped.load()
-    opaque_data = frame_with_opaque_bg.load()
+    # Convert frame to numpy array for processing
+    frame_array = np.array(frame_cropped)
 
-    for y in range(frame_cropped.size[1]):
-        for x in range(frame_cropped.size[0]):
-            r, g, b, a = frame_data[x, y]
-            if a < 128:
-                # This is the cutout area - keep it fully transparent
-                opaque_data[x, y] = (255, 255, 255, 0)
-            else:
-                # This is the frame - make it fully opaque
-                opaque_data[x, y] = (r, g, b, 255)
+    # Calculate brightness of each pixel (using RGB values, ignoring alpha)
+    # Brightness = (R + G + B) / 3
+    if frame_array.shape[2] == 4:  # RGBA
+        brightness = np.mean(frame_array[:, :, :3], axis=2)
+    else:  # RGB
+        brightness = np.mean(frame_array[:, :, :3], axis=2)
 
-    frame_cropped = frame_with_opaque_bg
+    # Find dark pixels (brightness threshold: below 80 out of 255)
+    # This captures the dark "camera view" area
+    dark_threshold = 80
+    dark_mask = brightness < dark_threshold
+
+    # Find connected components to identify the main dark region
+    from scipy import ndimage
+    labeled, num_features = ndimage.label(dark_mask)
+
+    if num_features > 0:
+        # Find the largest dark region (likely the camera view)
+        sizes = ndimage.sum(dark_mask, labeled, range(num_features + 1))
+        largest_region = np.argmax(sizes[1:]) + 1  # Skip background (0)
+
+        # Create mask for only the largest dark region
+        main_dark_mask = (labeled == largest_region)
+
+        # Additionally, prefer regions near the center (camera view is typically centered)
+        center_y, center_x = frame_array.shape[0] // 2, frame_array.shape[1] // 2
+        y_coords, x_coords = np.indices(frame_array.shape[:2])
+
+        # Calculate distance from center for each dark pixel
+        distances = np.sqrt((x_coords - center_x)**2 + (y_coords - center_y)**2)
+
+        # Only keep dark regions that are reasonably close to center
+        # (within 60% of the image dimensions from center)
+        max_distance = min(frame_array.shape[0], frame_array.shape[1]) * 0.6
+        center_proximity_mask = distances < max_distance
+
+        # Combine: main dark region AND near center
+        final_dark_mask = main_dark_mask & center_proximity_mask
+
+        # Create the opaque frame
+        frame_with_opaque_bg = np.array(frame_cropped.copy())
+
+        # Set alpha channel: transparent for dark center, opaque everywhere else
+        if frame_with_opaque_bg.shape[2] == 4:  # RGBA
+            # Dark areas become transparent (alpha = 0)
+            frame_with_opaque_bg[final_dark_mask, 3] = 0
+            # Everything else becomes opaque (alpha = 255)
+            frame_with_opaque_bg[~final_dark_mask, 3] = 255
+
+        frame_cropped = Image.fromarray(frame_with_opaque_bg, mode='RGBA')
+    else:
+        # No dark regions found - fall back to original transparency behavior
+        frame_with_opaque_bg = Image.new("RGBA", frame_cropped.size, (255, 255, 255, 255))
+        frame_data = frame_cropped.load()
+        opaque_data = frame_with_opaque_bg.load()
+
+        for y in range(frame_cropped.size[1]):
+            for x in range(frame_cropped.size[0]):
+                r, g, b, a = frame_data[x, y]
+                if a < 128:
+                    opaque_data[x, y] = (255, 255, 255, 0)
+                else:
+                    opaque_data[x, y] = (r, g, b, 255)
+
+        frame_cropped = frame_with_opaque_bg
 
     # Center the photo (crop will happen if aspect ratios differ)
     photo_x = (photo_width - final_photo_width) // 2
