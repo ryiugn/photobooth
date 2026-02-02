@@ -38,9 +38,13 @@ def pil_to_base64(image_bytes: bytes) -> str:
 async def apply_frame_from_bytes(photo_data: bytes, frame_data: bytes) -> bytes:
     """Apply frame to photo from bytes and return as bytes.
 
-    Uses only Pillow (PIL) - no OpenCV needed.
+    Automatically detects dark "camera view" area in center of frame
+    and makes everything else opaque.
+
+    Uses Pillow (PIL) with numpy for image processing.
     """
     from PIL import Image
+    import numpy as np
 
     # Load photo from bytes (supports JPEG, PNG, WebP)
     photo_pil = Image.open(io.BytesIO(photo_data))
@@ -72,6 +76,54 @@ async def apply_frame_from_bytes(photo_data: bytes, frame_data: bytes) -> bytes:
     crop_x = (scaled_frame_width - photo_width) // 2
     crop_y = (scaled_frame_height - photo_height) // 2
     frame_cropped = frame_scaled.crop((crop_x, crop_y, crop_x + photo_width, crop_y + photo_height))
+
+    # Detect the dark "camera view" area and make everything else opaque
+    frame_array = np.array(frame_cropped)
+
+    # Calculate brightness of each pixel
+    if frame_array.shape[2] == 4:  # RGBA
+        brightness = np.mean(frame_array[:, :, :3], axis=2)
+    else:  # RGB
+        brightness = np.mean(frame_array[:, :, :3], axis=2)
+
+    # Find dark pixels (brightness threshold: below 80 out of 255)
+    dark_threshold = 80
+    dark_mask = brightness < dark_threshold
+
+    # Find connected components to identify the main dark region
+    try:
+        from scipy import ndimage
+        labeled, num_features = ndimage.label(dark_mask)
+
+        if num_features > 0:
+            # Find the largest dark region (likely the camera view)
+            sizes = ndimage.sum(dark_mask, labeled, range(num_features + 1))
+            largest_region = np.argmax(sizes[1:]) + 1
+
+            # Create mask for only the largest dark region
+            main_dark_mask = (labeled == largest_region)
+
+            # Additionally, prefer regions near the center
+            center_y, center_x = frame_array.shape[0] // 2, frame_array.shape[1] // 2
+            y_coords, x_coords = np.indices(frame_array.shape[:2])
+            distances = np.sqrt((x_coords - center_x)**2 + (y_coords - center_y)**2)
+
+            # Only keep dark regions reasonably close to center
+            max_distance = min(frame_array.shape[0], frame_array.shape[1]) * 0.6
+            center_proximity_mask = distances < max_distance
+
+            # Combine: main dark region AND near center
+            final_dark_mask = main_dark_mask & center_proximity_mask
+
+            # Update alpha channel
+            if frame_array.shape[2] == 4:  # RGBA
+                frame_array[final_dark_mask, 3] = 0  # Transparent for dark center
+                frame_array[~final_dark_mask, 3] = 255  # Opaque everywhere else
+
+            frame_cropped = Image.fromarray(frame_array, mode='RGBA')
+    except ImportError:
+        # scipy not available - skip dark detection
+        pass
 
     # Scale photo to fit within frame (contain)
     photo_scale_x = photo_width / photo_pil.width
