@@ -433,11 +433,10 @@ class CaptureDisplayPage(QWidget):
         """
         if self.camera_handler:
             try:
-                # Get raw frame from camera
                 from src.exposure_utils import apply_exposure
 
-                # Capture raw frame (we need access to the underlying frame data)
-                ret, frame = self.camera_handler.camera.read()
+                # Get raw frame from camera
+                ret, frame = self.camera_handler.get_raw_frame()
                 if not ret:
                     raise RuntimeError("Failed to read frame from camera")
 
