@@ -20,8 +20,9 @@ router = APIRouter()
 # Request/Response Models
 class ComposeRequest(BaseModel):
     """Request to compose photostrip from already-framed photos."""
-    photos: List[str]  # List of 4 base64-encoded framed photos
+    photos: List[str]  # List of 4 or 9 base64-encoded framed photos
     frame_ids: List[str] | None = None  # Optional, not used (photos already framed)
+    exposure_values: List[float] | None = None  # Exposure values for each photo [-2.0, +2.0]
 
 
 class ComposeResponse(BaseModel):
@@ -48,6 +49,45 @@ def base64_to_bytes(base64_data: str) -> bytes:
     if ',' in base64_data:
         base64_data = base64_data.split(',')[1]
     return base64.b64decode(base64_data)
+
+
+def apply_exposure_to_image(image_bytes: bytes, exposure_value: float) -> bytes:
+    """
+    Apply exposure adjustment to an image.
+
+    Args:
+        image_bytes: Image data as bytes
+        exposure_value: Exposure value in range [-2.0, +2.0]
+
+    Returns:
+        Adjusted image as bytes
+    """
+    from PIL import Image, ImageEnhance
+    import numpy as np
+
+    # Clamp exposure to valid range
+    exposure_value = max(-2.0, min(2.0, exposure_value))
+
+    # Load image
+    img = Image.open(io.BytesIO(image_bytes))
+    if img.mode != 'RGB':
+        img = img.convert('RGB')
+
+    # If no adjustment, return original
+    if exposure_value == 0.0:
+        return image_bytes
+
+    # Calculate brightness factor: 2^exposure_value
+    brightness_factor = 2.0 ** exposure_value
+
+    # Apply brightness adjustment
+    enhancer = ImageEnhance.Brightness(img)
+    adjusted = enhancer.enhance(brightness_factor)
+
+    # Convert to bytes
+    output = io.BytesIO()
+    adjusted.save(output, format='PNG')
+    return output.getvalue()
 
 
 async def apply_frame_to_photo_pil(photo_pil, frame_pil):
@@ -176,7 +216,10 @@ async def apply_frame_to_photo_pil(photo_pil, frame_pil):
 
 async def compose_photostrip_from_bytes(photo_bytes_list: List[bytes], frame_bytes_list: List[bytes], gap: int = 20) -> bytes:
     """
-    Compose multiple photos into a vertical photostrip with frame overlays.
+    Compose multiple photos into a photostrip with frame overlays.
+
+    For 4 photos: 2x2 grid
+    For 9 photos: 3x3 grid
 
     Args:
         photo_bytes_list: List of photo data as bytes
@@ -188,8 +231,18 @@ async def compose_photostrip_from_bytes(photo_bytes_list: List[bytes], frame_byt
     """
     from PIL import Image
 
-    if len(photo_bytes_list) != 4 or len(frame_bytes_list) != 4:
-        raise ValueError("Must have exactly 4 photos and 4 frames")
+    if len(photo_bytes_list) not in (4, 9) or len(frame_bytes_list) != len(photo_bytes_list):
+        raise ValueError("Must have 4 or 9 photos and matching number of frames")
+
+    photo_count = len(photo_bytes_list)
+
+    # Determine grid layout
+    if photo_count == 4:
+        grid_cols = 2
+        grid_rows = 2
+    else:  # 9 photos
+        grid_cols = 3
+        grid_rows = 3
 
     # Load and frame each photo
     framed_photos = []
@@ -207,18 +260,27 @@ async def compose_photostrip_from_bytes(photo_bytes_list: List[bytes], frame_byt
     # Get dimensions from first photo
     first_width, first_height = framed_photos[0].size
 
-    # Calculate strip dimensions
-    strip_width = first_width
-    strip_height = (first_height * len(framed_photos)) + (gap * (len(framed_photos) - 1))
+    # Use square photo size for grid
+    photo_size = min(first_width, first_height)
+    strip_width = (photo_size * grid_cols) + (gap * (grid_cols + 1))
+    strip_height = (photo_size * grid_rows) + (gap * (grid_rows + 1))
 
-    # Create strip image
-    photostrip = Image.new("RGB", (strip_width, strip_height))
+    # Create strip image with white background
+    photostrip = Image.new("RGB", (strip_width, strip_height), color=(255, 255, 255))
 
-    # Paste each photo vertically
-    y_offset = 0
-    for framed_photo in framed_photos:
-        photostrip.paste(framed_photo, (0, y_offset))
-        y_offset += first_height + gap
+    # Paste each photo in grid layout
+    for index, framed_photo in enumerate(framed_photos):
+        col = index % grid_cols
+        row = index // grid_cols
+
+        # Resize photo to fit grid cell
+        resized_photo = framed_photo.resize((photo_size, photo_size), Image.Resampling.BILINEAR)
+
+        # Calculate position
+        x = gap + (photo_size + gap) * col
+        y = gap + (photo_size + gap) * row
+
+        photostrip.paste(resized_photo, (x, y))
 
     # Convert to bytes
     img_bytes = io.BytesIO()
@@ -233,13 +295,14 @@ async def compose_photostrip(
     user: dict = Depends(get_current_user)
 ):
     """
-    Compose 4 already-framed photos into a vertical photostrip.
+    Compose 4 or 9 already-framed photos into an A6 photostrip with black borders.
 
     Note: Photos are already framed by the capture endpoint.
-    This endpoint only stitches them together.
+    This endpoint stitches them together with optional exposure adjustments.
 
     Args:
-        request: Composition request with 4 base64-encoded framed photos
+        request: Composition request with 4 or 9 base64-encoded framed photos
+                 and optional exposure values
 
     Returns:
         ComposeResponse with photostrip as base64
@@ -247,23 +310,35 @@ async def compose_photostrip(
     Raises:
         HTTPException: If composition fails
     """
-    # Validate exactly 4 photos
-    if len(request.photos) != 4:
+    # Validate photo count (4 or 9)
+    photo_count = len(request.photos)
+    if photo_count not in (4, 9):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Must provide exactly 4 photos"
+            detail=f"Must provide exactly 4 or 9 photos, got {photo_count}"
         )
 
-    # Convert base64 photos to bytes
+    # Initialize exposure values if not provided
+    exposure_values = request.exposure_values if request.exposure_values else [0.0] * photo_count
+    if len(exposure_values) != photo_count:
+        exposure_values = (exposure_values + [0.0] * photo_count)[:photo_count]
+
+    # Convert base64 photos to bytes and apply exposure
     try:
-        photo_bytes_list = [base64_to_bytes(photo) for photo in request.photos]
+        photo_bytes_list = []
+        for i, photo in enumerate(request.photos):
+            photo_bytes = base64_to_bytes(photo)
+            # Apply exposure if not zero
+            if exposure_values[i] != 0.0:
+                photo_bytes = apply_exposure_to_image(photo_bytes, exposure_values[i])
+            photo_bytes_list.append(photo_bytes)
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid photo data: {str(e)}"
         )
 
-    # Just stitch the already-framed photos together
+    # Stitch the framed photos together with A6 layout
     try:
         strip_bytes = await stitch_photostrip_from_bytes(photo_bytes_list)
     except Exception as e:
@@ -282,21 +357,38 @@ async def compose_photostrip(
     )
 
 
-async def stitch_photostrip_from_bytes(photo_bytes_list: List[bytes], gap: int = 20) -> bytes:
+async def stitch_photostrip_from_bytes(photo_bytes_list: List[bytes], gap: int = 10) -> bytes:
     """
-    Stitch already-framed photos into a vertical photostrip.
+    Stitch already-framed photos into an A6 photostrip with black borders.
+
+    For 4 photos: vertical strip (1 column × 4 rows)
+    For 9 photos: 3×3 grid
 
     Args:
-        photo_bytes_list: List of 4 framed photos as bytes
-        gap: Gap between photos in pixels
+        photo_bytes_list: List of 4 or 9 framed photos as bytes
+        gap: Gap between photos in pixels (border width)
 
     Returns:
         Composed photostrip as bytes
     """
     from PIL import Image
 
-    if len(photo_bytes_list) != 4:
-        raise ValueError("Must have exactly 4 photos")
+    photo_count = len(photo_bytes_list)
+    if photo_count not in (4, 9):
+        raise ValueError(f"Must have exactly 4 or 9 photos, got {photo_count}")
+
+    # A6 dimensions at 150 DPI
+    target_width = 1240
+    target_height = 1748
+    border_width = gap
+
+    # Determine grid layout
+    if photo_count == 4:
+        grid_cols = 1
+        grid_rows = 4
+    else:  # 9 photos
+        grid_cols = 3
+        grid_rows = 3
 
     # Load each framed photo
     framed_photos = []
@@ -307,21 +399,33 @@ async def stitch_photostrip_from_bytes(photo_bytes_list: List[bytes], gap: int =
             photo_pil = photo_pil.convert('RGB')
         framed_photos.append(photo_pil)
 
-    # Get dimensions from first photo
-    first_width, first_height = framed_photos[0].size
+    # Calculate photo dimensions to fit A6 with borders
+    # Available space = total size - (border_width * (grid_dim + 1))
+    available_width = target_width - (border_width * (grid_cols + 1))
+    available_height = target_height - (border_width * (grid_rows + 1))
 
-    # Calculate strip dimensions
-    strip_width = first_width
-    strip_height = (first_height * len(framed_photos)) + (gap * (len(framed_photos) - 1))
+    photo_width = available_width // grid_cols
+    photo_height = available_height // grid_rows
 
-    # Create strip image
-    photostrip = Image.new("RGB", (strip_width, strip_height))
-
-    # Paste each photo vertically
-    y_offset = 0
+    # Resize all photos to calculated dimensions
+    resized_photos = []
     for framed_photo in framed_photos:
-        photostrip.paste(framed_photo, (0, y_offset))
-        y_offset += first_height + gap
+        resized = framed_photo.resize((photo_width, photo_height), Image.Resampling.LANCZOS)
+        resized_photos.append(resized)
+
+    # Create A6 canvas with black background (creates outer borders)
+    photostrip = Image.new("RGB", (target_width, target_height), color=(0, 0, 0))
+
+    # Paste each photo in grid layout with borders
+    for index, resized_photo in enumerate(resized_photos):
+        col = index % grid_cols
+        row = index // grid_cols
+
+        # Calculate position with border offset
+        x = border_width + (col * (photo_width + border_width))
+        y = border_width + (row * (photo_height + border_width))
+
+        photostrip.paste(resized_photo, (x, y))
 
     # Convert to bytes
     img_bytes = io.BytesIO()
