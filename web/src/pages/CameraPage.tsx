@@ -365,11 +365,6 @@ export default function CameraPage() {
             // Reset exposure for next photo
             setCurrentExposure(0);
           }
-            console.log('[Camera] All photos captured, navigating to reveal');
-            // Navigate to composition
-            navigate('/reveal');
-          }
-          // If not all photos captured, the component will re-render with updated currentPhotoIndex
         } catch (err) {
           console.error('[Capture] Skip error:', err);
           alert('Failed to process blank photo. Please try again.');

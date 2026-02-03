@@ -9,91 +9,37 @@ import { apiService } from '../services/api';
 
 export default function PhotostripRevealPage() {
   const navigate = useNavigate();
-  const { capturedPhotos, selectedFrames, finalPhotostrip, setFinalPhotostrip, resetCapture, photosPerStrip } = useAppStore();
+  const { capturedPhotos, selectedFrames, finalPhotostrip, setFinalPhotostrip, resetCapture, photosPerStrip, exposureValues } = useAppStore();
   const [isComposing, setIsComposing] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
-  // Compose photostrip on mount (client-side)
+  // Compose photostrip on mount using API (A6 format with black borders)
   useEffect(() => {
     const composeStrip = async () => {
       try {
-        console.log('[Composition] Composing photostrip from', capturedPhotos.length, 'photos (client-side)');
+        console.log('[Composition] Composing photostrip from', capturedPhotos.length, 'photos (API with A6 layout)');
 
         const photoCount = capturedPhotos.length;
         if (photoCount !== 4 && photoCount !== 9) {
           throw new Error(`Expected 4 or 9 photos, got ${photoCount}`);
         }
 
-        // Client-side composition: load images and compose on canvas
-        const STRIP_WIDTH = photoCount === 9 ? 900 : 640;
-        const PHOTO_HEIGHT = 480;
-        const SPACING = 20;
-
-        // Calculate dimensions based on photo count
-        let canvasWidth: number;
-        let canvasHeight: number;
-        const gridCols = photoCount === 9 ? 3 : 2;
-        const gridRows = photoCount === 9 ? 3 : 2;
-
-        if (photoCount === 9) {
-          // 3x3 grid layout for 9 frames
-          const photoWidth = (STRIP_WIDTH - (SPACING * (gridCols + 1))) / gridCols;
-          canvasWidth = STRIP_WIDTH;
-          canvasHeight = (photoWidth * gridRows) + (SPACING * (gridRows + 1));
-        } else {
-          // 2x2 grid layout for 4 frames
-          const photoWidth = (STRIP_WIDTH - (SPACING * (gridCols + 1))) / gridCols;
-          canvasWidth = STRIP_WIDTH;
-          canvasHeight = (photoWidth * gridRows) + (SPACING * (gridRows + 1));
-        }
-
-        const canvas = document.createElement('canvas');
-        canvas.width = canvasWidth;
-        canvas.height = canvasHeight;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) throw new Error('Failed to get canvas context');
-
-        // White background
-        ctx.fillStyle = '#FFFFFF';
-        ctx.fillRect(0, 0, canvasWidth, canvasHeight);
-
-        // Load all photos
-        const loadImage = (src: string): Promise<HTMLImageElement> => {
-          return new Promise((resolve, reject) => {
-            const img = new Image();
-            img.onload = () => resolve(img);
-            img.onerror = reject;
-            img.src = src;
-          });
-        };
-
-        const photos = await Promise.all(capturedPhotos.map(loadImage));
-
-        // Draw photos in grid layout
-        const photoWidth = (canvasWidth - (SPACING * (gridCols + 1))) / gridCols;
-        const photoHeight = photoCount === 9 ? photoWidth : (canvasHeight - (SPACING * (gridRows + 1))) / gridRows;
-
-        photos.forEach((photo, index) => {
-          const col = index % gridCols;
-          const row = Math.floor(index / gridCols);
-          const x = SPACING + (photoWidth + SPACING) * col;
-          const y = SPACING + (photoHeight + SPACING) * row;
-          ctx.drawImage(photo, x, y, photoWidth, photoHeight);
+        // Call API composition with exposure values
+        const response = await apiService.composePhotostrip({
+          photos: capturedPhotos,
+          exposureValues: exposureValues,
         });
 
-        // Convert to data URL
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
-        console.log('[Composition] Photostrip composed successfully (client-side)');
-
-        setFinalPhotostrip(dataUrl);
+        console.log('[Composition] Photostrip composed successfully (A6 format with black borders)');
+        setFinalPhotostrip(response.photostrip_base64);
 
         // Upload to cloud in background (non-blocking)
-        uploadToCloud(dataUrl);
+        uploadToCloud(response.photostrip_base64);
       } catch (err) {
         console.error('[Composition] Composition error:', err);
-        alert('Failed to compose photostrip');
+        alert('Failed to compose photostrip. Please try again.');
       } finally {
         setIsComposing(false);
       }
