@@ -4,82 +4,118 @@ from pathlib import Path
 import cv2
 
 
-def compose_photostrip(photos: list, frame_paths, gap: int = 20) -> Image.Image:
+def compose_photostrip(
+    photos: list,
+    frame_paths,
+    exposure_values: list[float] = None,
+    target_size: tuple = (1240, 1748),
+    border_width: int = 10
+) -> Image.Image:
     """
-    Compose multiple photos into a photostrip with frame overlay.
+    Compose multiple photos into an A6 photostrip with frame overlay and black borders.
 
     Layouts:
-    - 4 photos: vertical strip (2x2 grid or 1x4 vertical)
-    - 9 photos: 3x3 grid
+    - 4 photos: vertical strip (1 column × 4 rows)
+    - 9 photos: 3×3 grid
 
     Args:
         photos: List of captured photos as numpy arrays (BGR format from OpenCV)
         frame_paths: Path to frame PNG file (str) or list of paths (one per photo)
-        gap: Gap between photos in pixels (default: 20)
+        exposure_values: Optional list of exposure adjustment values, one per photo.
+                        Each value in range [-2.0, +2.0], None or 0.0 = no adjustment.
+        target_size: Output dimensions as (width, height). Default A6 at 150 DPI: (1240, 1748)
+        border_width: Width of black borders in pixels. Applied between photos and outer edges.
 
     Returns:
-        Composed PIL Image with all photos arranged and frame applied to each
+        Composed PIL Image with all photos arranged, frames applied, and black borders
 
     Raises:
         FileNotFoundError: If frame file doesn't exist
-        ValueError: If photos list is empty or not 4 or 9
+        ValueError: If photos list is empty
     """
     if not photos:
         raise ValueError("No photos provided for composition")
 
     num_photos = len(photos)
+    target_width, target_height = target_size
+
+    # Initialize exposure values if not provided
+    if exposure_values is None:
+        exposure_values = [0.0] * num_photos
+
+    # Ensure exposure_values matches photos count
+    if len(exposure_values) != num_photos:
+        exposure_values = [exposure_values[i] if i < len(exposure_values) else 0.0
+                          for i in range(num_photos)]
+
+    # Import exposure utility
+    from src.exposure_utils import apply_exposure
 
     # Handle both single frame path (str) and multiple frame paths (list)
     if isinstance(frame_paths, str):
-        # Single frame for all photos
         if not Path(frame_paths).exists():
             raise FileNotFoundError(f"Frame file not found: {frame_paths}")
         frame_paths_list = [frame_paths] * num_photos
     else:
-        # Multiple frames (one per photo)
         frame_paths_list = frame_paths
         for frame_path in frame_paths_list:
             if not Path(frame_path).exists():
                 raise FileNotFoundError(f"Frame file not found: {frame_path}")
 
-    # Convert all photos to PIL Images with frame applied
+    # Apply exposure and convert all photos to PIL Images with frame applied
     framed_photos = []
-    for photo, frame_path in zip(photos, frame_paths_list):
-        # Apply frame to each photo
-        framed = apply_frame(photo, frame_path)
-        framed_photos.append(framed)
+    for i, (photo, frame_path) in enumerate(zip(photos, frame_paths_list)):
+        # Apply exposure adjustment first
+        adjusted_photo = photo
+        if exposure_values[i] != 0.0:
+            adjusted_photo = apply_exposure(photo, exposure_values[i])
 
-    # Get dimensions from first framed photo
-    first_width, first_height = framed_photos[0].size
+        # Apply frame to each photo
+        framed = apply_frame(adjusted_photo, frame_path)
+        framed_photos.append(framed)
 
     # Determine layout based on number of photos
     if num_photos == 4:
-        # 4 photos: 2x2 grid layout (more compact than vertical)
-        cols = 2
-        rows = 2
+        # 4 photos: vertical strip (1 column, 4 rows)
+        cols = 1
+        rows = 4
     elif num_photos == 9:
-        # 9 photos: 3x3 grid layout
+        # 9 photos: 3×3 grid layout
         cols = 3
         rows = 3
     else:
-        # Fallback: vertical strip (1 column, N rows)
+        # Fallback: calculate grid from photo count
         cols = 1
         rows = num_photos
 
-    # Calculate strip dimensions
-    strip_width = (first_width * cols) + (gap * (cols - 1))
-    strip_height = (first_height * rows) + (gap * (rows - 1))
+    # Calculate photo dimensions to fit A6 with borders
+    # Total horizontal space: (photo_width * cols) + (border_width * (cols + 1))
+    # Total vertical space: (photo_height * rows) + (border_width * (rows + 1))
+    available_width = target_width - (border_width * (cols + 1))
+    available_height = target_height - (border_width * (rows + 1))
 
-    # Create new image for the strip
-    photostrip = Image.new("RGB", (strip_width, strip_height))
+    photo_width = available_width // cols
+    photo_height = available_height // rows
 
-    # Paste each photo in grid layout
-    for i, framed_photo in enumerate(framed_photos):
+    # Resize all framed photos to calculated dimensions
+    resized_photos = []
+    for framed_photo in framed_photos:
+        resized = framed_photo.resize((photo_width, photo_height), Image.Resampling.LANCZOS)
+        resized_photos.append(resized)
+
+    # Create A6 canvas with black background (creates outer borders)
+    photostrip = Image.new("RGB", (target_width, target_height), (0, 0, 0))
+
+    # Paste each photo in grid layout with borders
+    for i, resized_photo in enumerate(resized_photos):
         row = i // cols
         col = i % cols
-        x_offset = col * (first_width + gap)
-        y_offset = row * (first_height + gap)
-        photostrip.paste(framed_photo, (x_offset, y_offset))
+
+        # Calculate position with border offset
+        x_offset = border_width + (col * (photo_width + border_width))
+        y_offset = border_width + (row * (photo_height + border_width))
+
+        photostrip.paste(resized_photo, (x_offset, y_offset))
 
     return photostrip
 
