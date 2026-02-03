@@ -567,7 +567,7 @@ export default function CameraPage() {
               flex: 1,
               height: '8px',
               borderRadius: '4px',
-              background: `linear-gradient(to right, #888 0%, ${currentExposure === 0 ? '#fff' : currentExposure > 0 ? '#ddd' : '#ccc'} 50%, #888 100%)`,
+              background: 'linear-gradient(to right, #888 0%, #fff 50%, #888 100%)',
               cursor: 'pointer',
             }}
           />
