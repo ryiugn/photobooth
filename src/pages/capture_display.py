@@ -658,10 +658,14 @@ class CaptureDisplayPage(QWidget):
     def retake_current_photo(self):
         """Retake the current photo.
 
-        Discards the current capture and returns to capture mode.
+        Discards the current capture, resets exposure, and returns to capture mode.
         """
         # Clear current capture
         self.current_capture = None
+
+        # Reset exposure slider for the retake
+        self.exposure_slider.setValue(0)
+        self.current_exposure = 0.0
 
         # Return to capture mode
         self.return_to_capture_mode()
@@ -823,6 +827,9 @@ class CaptureDisplayPage(QWidget):
             )
             if reply == QMessageBox.Yes:
                 # Cleanup and emit go_back signal
+                self.captured_photos.clear()
+                self.exposure_values.clear()
+                self.current_photo_index = 0
                 self.cleanup()
                 self.go_back.emit()
         else:
