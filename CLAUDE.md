@@ -14,6 +14,22 @@ Available superpowers skills:
 - `superpowers:writing-plans` - MUST use when you have requirements for multi-step tasks
 - `superpowers:verification-before-completion` - MUST use before claiming work is complete, fixing, or passing
 
+**DEPLOYMENT POLICY - CRITICAL**:
+- **ALWAYS check for existing deployments BEFORE creating new ones**
+- Use Vercel CLI to check current deployment URLs:
+  ```bash
+  # Check API backend deployments
+  cd api
+  vercel list --yes
+
+  # Check web frontend deployments
+  cd ../web
+  vercel list --yes
+  ```
+- Reuse existing deployments when possible - only deploy new versions when code has changed
+- Deployment URLs change with each deploy - update environment variables after deploying
+- See README.md "Checking Deployment URLs (REQUIRED)" section for full details
+
 ## Project Overview
 
 This is a photobooth project that implements a **4-page secure camera application** with real-time image capture, frame selection, and photostrip generation. The application follows a simple, user-friendly flow with authentication:
