@@ -1,9 +1,10 @@
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-                             QPushButton, QStackedWidget, QMessageBox)
+                             QPushButton, QStackedWidget, QMessageBox, QSlider)
 from PyQt5.QtGui import QPixmap, QFont, QPalette, QImage
 from PyQt5.QtCore import Qt, QTimer, QSize
 from PyQt5.QtCore import pyqtSignal
 import os
+import cv2
 from datetime import datetime
 from pathlib import Path
 
@@ -38,8 +39,8 @@ class CaptureDisplayPage(QWidget):
         print(f"[DEBUG] CaptureDisplayPage.__init__ called with frame_paths={frame_paths}, photos_per_strip={photos_per_strip}")
 
         # Validate frame_paths
-        if len(frame_paths) != 4:
-            raise ValueError(f"Expected 4 frame paths (one per photo), got {len(frame_paths)}")
+        if len(frame_paths) not in (4, 9):
+            raise ValueError(f"Expected 4 or 9 frame paths (one per photo), got {len(frame_paths)}")
         self.frame_paths = frame_paths
         for frame_path in frame_paths:
             if not Path(frame_path).exists():
@@ -54,6 +55,8 @@ class CaptureDisplayPage(QWidget):
         self.current_capture = None  # Temporary holding for preview
         self.photos_per_strip = photos_per_strip  # Total photos needed
         self.final_image = None  # Composed photostrip
+        self.current_exposure = 0.0  # Current exposure value for this photo
+        self.exposure_values = []  # List to store exposure value for each captured photo
 
         print(f"[DEBUG] Variables initialized, calling setup_ui...")
 
@@ -214,6 +217,68 @@ class CaptureDisplayPage(QWidget):
         self.camera_label.setText("Camera starting...")
         layout.addWidget(self.camera_label)
 
+        # Exposure adjustment slider
+        exposure_layout = QHBoxLayout()
+        exposure_layout.setSpacing(15)
+
+        exposure_label = QLabel("Exposure:")
+        exposure_label.setStyleSheet("""
+            QLabel {
+                color: #1A0A00;
+                font-size: 16px;
+                font-weight: bold;
+                background-color: transparent;
+                padding: 5px;
+            }
+        """)
+        exposure_layout.addWidget(exposure_label)
+
+        self.exposure_slider = QSlider(Qt.Horizontal)
+        self.exposure_slider.setRange(-20, 20)  # -2.0 to +2.0 (divide by 10)
+        self.exposure_slider.setValue(0)  # Default: no adjustment
+        self.exposure_slider.setFixedWidth(300)
+        self.exposure_slider.setStyleSheet("""
+            QSlider::groove:horizontal {
+                border: 2px solid #1A0A00;
+                height: 12px;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #888888, stop:0.5 #FFFFFF, stop:1 #CCCCCC);
+                border-radius: 6px;
+            }
+            QSlider::handle:horizontal {
+                background: #FFC0CB;
+                border: 2px solid #1A0A00;
+                width: 24px;
+                height: 24px;
+                margin: -6px 0;
+                border-radius: 12px;
+            }
+            QSlider::handle:horizontal:hover {
+                background: #FFDAB9;
+            }
+        """)
+        self.exposure_slider.valueChanged.connect(self._on_exposure_changed)
+        exposure_layout.addWidget(self.exposure_slider)
+
+        self.exposure_value_label = QLabel("0.0")
+        self.exposure_value_label.setFixedWidth(40)
+        self.exposure_value_label.setAlignment(Qt.AlignCenter)
+        self.exposure_value_label.setStyleSheet("""
+            QLabel {
+                color: #1A0A00;
+                font-size: 16px;
+                font-weight: bold;
+                background-color: transparent;
+                padding: 5px;
+            }
+        """)
+        exposure_layout.addWidget(self.exposure_value_label)
+
+        exposure_container = QWidget()
+        exposure_container.setLayout(exposure_layout)
+        exposure_container.setMaximumWidth(500)
+        layout.addWidget(exposure_container, alignment=Qt.AlignCenter)
+
         # Countdown overlay label (hidden initially)
         self.countdown_label = QLabel(self.camera_label)
         self.countdown_label.setAlignment(Qt.AlignCenter)
@@ -261,6 +326,16 @@ class CaptureDisplayPage(QWidget):
 
         widget.setLayout(layout)
         return widget
+
+    def _on_exposure_changed(self, value: int):
+        """Handle exposure slider value change.
+
+        Args:
+            value: Slider value (-20 to +20, divide by 10 for actual exposure)
+        """
+        exposure = value / 10.0  # Convert to -2.0 to +2.0 range
+        self.current_exposure = exposure
+        self.exposure_value_label.setText(f"{exposure:+.1f}")
 
     def create_preview_widget(self) -> QWidget:
         """Create the preview widget for single photo review.
@@ -354,11 +429,32 @@ class CaptureDisplayPage(QWidget):
     def update_camera_feed(self):
         """Update camera label with latest frame from camera.
 
-        Called periodically by feed_timer.
+        Called periodically by feed_timer. Applies exposure adjustment if set.
         """
         if self.camera_handler:
             try:
-                pixmap = self.camera_handler.get_frame()
+                # Get raw frame from camera
+                from src.exposure_utils import apply_exposure
+
+                # Capture raw frame (we need access to the underlying frame data)
+                ret, frame = self.camera_handler.camera.read()
+                if not ret:
+                    raise RuntimeError("Failed to read frame from camera")
+
+                # Apply exposure adjustment if set
+                if self.current_exposure != 0.0:
+                    frame = apply_exposure(frame, self.current_exposure)
+
+                # Convert BGR to RGB
+                rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+                # Convert to QImage
+                h, w, ch = rgb_frame.shape
+                bytes_per_line = ch * w
+                qt_image = QImage(rgb_frame.data, w, h, bytes_per_line, QImage.Format_RGB888)
+
+                # Convert to QPixmap
+                pixmap = QPixmap.fromImage(qt_image)
                 scaled_pixmap = pixmap.scaled(
                     self.camera_label.size(),
                     Qt.KeepAspectRatio,
@@ -463,11 +559,23 @@ class CaptureDisplayPage(QWidget):
             # Stop camera feed
             self.feed_timer.stop()
 
-            # Capture photo from camera (BGR format)
-            self.current_capture = self.camera_handler.capture_photo()
+            # Get the displayed size from camera_label to match preview
+            displayed_size = self.camera_label.size()
+            print(f"[DEBUG] Capturing photo at displayed size: {displayed_size.width()}x{displayed_size.height()}")
+
+            # Capture photo from camera at the displayed dimensions to match preview
+            self.current_capture = self.camera_handler.capture_photo(
+                target_width=displayed_size.width(),
+                target_height=displayed_size.height()
+            )
+
+            # Store the exposure value used for this capture
+            self.exposure_values.append(self.current_exposure)
 
             # Apply frame overlay (use frame for current photo index)
-            framed_photo = apply_frame(self.current_capture, self.frame_paths[self.current_photo_index])
+            frame_index = self.current_photo_index if self.current_photo_index < len(self.frame_paths) else 0
+            print(f"[DEBUG] Applying frame at index {frame_index} (current_photo_index={self.current_photo_index})")
+            framed_photo = apply_frame(self.current_capture, self.frame_paths[frame_index])
 
             # Display preview
             self.display_photo_preview(framed_photo)
@@ -532,15 +640,19 @@ class CaptureDisplayPage(QWidget):
         # Add the original captured photo (without frame) to list
         if self.current_capture is not None:
             self.captured_photos.append(self.current_capture)
+            print(f"[DEBUG] Photo accepted. captured_photos count: {len(self.captured_photos)}, current_photo_index: {self.current_photo_index}")
 
         # Increment to next photo
         self.current_photo_index += 1
+        print(f"[DEBUG] Incremented current_photo_index to: {self.current_photo_index}, photos_per_strip: {self.photos_per_strip}")
 
         if self.current_photo_index >= self.photos_per_strip:
             # All photos captured - compose and proceed
+            print(f"[DEBUG] All photos captured. Calling compose_and_proceed with {len(self.captured_photos)} photos")
             self.compose_and_proceed()
         else:
             # More photos needed - return to capture mode
+            print(f"[DEBUG] More photos needed. Returning to capture mode.")
             self.return_to_capture_mode()
 
     def retake_current_photo(self):
@@ -557,11 +669,15 @@ class CaptureDisplayPage(QWidget):
     def return_to_capture_mode(self):
         """Return to capture mode for next photo.
 
-        Updates progress label and restarts camera feed.
+        Updates progress label, resets exposure slider, and restarts camera feed.
         """
         # Update progress label
         photo_num = self.current_photo_index + 1
         self.progress_label.setText(f"Photo {photo_num} of {self.photos_per_strip}")
+
+        # Reset exposure slider to default for next photo
+        self.exposure_slider.setValue(0)
+        self.current_exposure = 0.0
 
         # Clear preview
         self.preview_photo_label.clear()
@@ -577,6 +693,9 @@ class CaptureDisplayPage(QWidget):
 
         Creates vertical strip from all captured photos with frame applied.
         """
+        print(f"[DEBUG] compose_and_proceed: captured_photos={len(self.captured_photos)}, photos_per_strip={self.photos_per_strip}")
+        print(f"[DEBUG] compose_and_proceed: frame_paths={len(self.frame_paths)}")
+
         if len(self.captured_photos) != self.photos_per_strip:
             QMessageBox.warning(self, "Error", f"Expected {self.photos_per_strip} photos, got {len(self.captured_photos)}")
             return
@@ -585,13 +704,24 @@ class CaptureDisplayPage(QWidget):
             # Import composer function
             from src.frame_composer import compose_photostrip
 
-            # Compose vertical strip with all frame paths
-            self.final_image = compose_photostrip(self.captured_photos, self.frame_paths)
+            print(f"[DEBUG] compose_and_proceed: Calling compose_photostrip...")
+
+            # Compose vertical strip with all frame paths and exposure values
+            self.final_image = compose_photostrip(
+                self.captured_photos,
+                self.frame_paths,
+                exposure_values=self.exposure_values
+            )
+
+            print(f"[DEBUG] compose_and_proceed: Photostrip composed successfully")
 
             # Navigate to Page 3
             self.photostrip_ready.emit(self.final_image)
 
         except Exception as e:
+            print(f"[DEBUG] compose_and_proceed ERROR: {type(e).__name__}: {e}")
+            import traceback
+            traceback.print_exc()
             QMessageBox.critical(self, "Error", f"Failed to compose photostrip: {str(e)}")
             # Return to capture mode as fallback
             self.return_to_capture_mode()
