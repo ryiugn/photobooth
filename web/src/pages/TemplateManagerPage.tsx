@@ -7,17 +7,30 @@ import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../state/store';
 import { apiService } from '../services/api';
 import { useCustomFrames } from '../hooks/useCustomFrames';
-import type { Template, CustomFrame } from '../types';
+import type { Template, CustomFrame, TemplateCategory } from '../types';
 
 const STORAGE_KEY = 'photobooth_templates';
 const CUSTOM_FRAMES_KEY = 'photobooth_custom_frames';
 
+const CATEGORIES: TemplateCategory[] = [
+  { value: 'all', label: 'ALL' },
+  { value: '4', label: '4 FRAMES' },
+  { value: '9', label: '9 FRAMES' },
+];
+
 export default function TemplateManagerPage() {
   const navigate = useNavigate();
-  const { templates, setTemplates, setSelectedFrame, selectedFrames, availableFrames, setAvailableFrames } = useAppStore();
+  const { templates, setTemplates, setSelectedFrame, selectedFrames, availableFrames, setAvailableFrames, setPhotosPerStrip } = useAppStore();
   const { customFrames } = useCustomFrames();
   const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
   const [isLoadingFrames, setIsLoadingFrames] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+
+  // Filter templates by category
+  const filteredTemplates = templates.filter(template => {
+    if (selectedCategory === 'all') return true;
+    return template.frameCount === parseInt(selectedCategory);
+  });
 
   // Load templates and available frames on mount
   useEffect(() => {
@@ -61,7 +74,11 @@ export default function TemplateManagerPage() {
     if (!selectedTemplate) return;
 
     console.log('[Template] Loading template:', selectedTemplate.name);
+    console.log('[Template] Template frame count:', selectedTemplate.frameCount);
     console.log('[Template] Template frame IDs:', selectedTemplate.frames);
+
+    // Set the photo count (4 or 9) based on template
+    setPhotosPerStrip(selectedTemplate.frameCount);
     console.log('[Template] Available frames:', availableFrames.map(f => ({ id: f.id, name: f.name })));
     console.log('[Template] Custom frames:', customFrames.map(cf => ({ id: cf.id, name: cf.name })));
 
@@ -143,15 +160,41 @@ export default function TemplateManagerPage() {
       padding: 'var(--spacing-lg)',
     }}>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', marginBottom: 'var(--spacing-xl)' }}>
-        <button
-          onClick={() => navigate('/frames')}
-          className="btn"
-          style={{ marginRight: 'var(--spacing-md)' }}
-        >
-          ← BACK
-        </button>
-        <h2 style={{ margin: 0 }}>TEMPLATES</h2>
+      <div style={{ marginBottom: 'var(--spacing-xl)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', marginBottom: 'var(--spacing-md)' }}>
+          <button
+            onClick={() => navigate('/frames')}
+            className="btn"
+            style={{ marginRight: 'var(--spacing-md)' }}
+          >
+            ← BACK
+          </button>
+          <h2 style={{ margin: 0 }}>TEMPLATES</h2>
+        </div>
+
+        {/* Category Filter */}
+        <div style={{
+          display: 'flex',
+          gap: 'var(--spacing-sm)',
+          justifyContent: 'center',
+        }}>
+          {CATEGORIES.map((category) => (
+            <button
+              key={category.value}
+              onClick={() => setSelectedCategory(category.value)}
+              className="btn"
+              style={{
+                backgroundColor: selectedCategory === category.value ? 'var(--color-accent)' : undefined,
+                opacity: selectedCategory === category.value ? 1 : 0.7,
+                minWidth: '100px',
+                padding: 'var(--spacing-xs) var(--spacing-sm)',
+                fontSize: 'var(--font-size-sm)',
+              }}
+            >
+              {category.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Two Column Layout */}
@@ -171,7 +214,7 @@ export default function TemplateManagerPage() {
           <h3 style={{ marginBottom: 'var(--spacing-md)' }}>Saved Templates</h3>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-sm)' }}>
-            {templates.map((template) => (
+            {filteredTemplates.map((template) => (
               <div
                 key={template.id}
                 onClick={() => setSelectedTemplate(template)}
@@ -188,13 +231,15 @@ export default function TemplateManagerPage() {
               >
                 <div style={{ fontWeight: 'bold' }}>{template.name}</div>
                 <div style={{ fontSize: 'var(--font-size-sm)', opacity: 0.7 }}>
-                  {new Date(template.created).toLocaleDateString()}
+                  {template.frameCount} Frames • {new Date(template.created).toLocaleDateString()}
                 </div>
               </div>
             ))}
 
-            {templates.length === 0 && (
-              <p style={{ textAlign: 'center', opacity: 0.6 }}>No templates saved yet</p>
+            {filteredTemplates.length === 0 && (
+              <p style={{ textAlign: 'center', opacity: 0.6 }}>
+                {templates.length === 0 ? 'No templates saved yet' : 'No templates in this category'}
+              </p>
             )}
           </div>
         </div>
@@ -218,33 +263,39 @@ export default function TemplateManagerPage() {
                 padding: 'var(--spacing-md)',
                 marginBottom: 'var(--spacing-lg)',
                 width: '100%',
-                maxWidth: '400px',
+                maxWidth: selectedTemplate.frameCount === 9 ? '500px' : '400px',
               }}>
-                {selectedTemplate.frames.map((framePath, index) => {
-                  // Resolve frame path to actual URL
-                  // Check if it's a custom frame ID (starts with 'custom_')
-                  let displaySrc = framePath;
-                  if (framePath.startsWith('custom_')) {
-                    const customFrame = customFrames.find(cf => cf.id === framePath);
-                    if (customFrame) {
-                      displaySrc = customFrame.dataUrl;
+                {/* Grid layout for frames */}
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: selectedTemplate.frameCount === 9 ? 'repeat(3, 1fr)' : 'repeat(2, 1fr)',
+                  gap: 'var(--spacing-xs)',
+                }}>
+                  {selectedTemplate.frames.map((framePath, index) => {
+                    // Resolve frame path to actual URL
+                    // Check if it's a custom frame ID (starts with 'custom_')
+                    let displaySrc = framePath;
+                    if (framePath.startsWith('custom_')) {
+                      const customFrame = customFrames.find(cf => cf.id === framePath);
+                      if (customFrame) {
+                        displaySrc = customFrame.dataUrl;
+                      }
                     }
-                  }
 
-                  return (
-                    <img
-                      key={index}
-                      src={displaySrc}
-                      alt={`Frame ${index + 1}`}
-                      style={{
-                        width: '100%',
-                        height: '80px',
-                        objectFit: 'contain',
-                        marginBottom: index < 3 ? 'var(--spacing-sm)' : 0,
-                      }}
-                    />
-                  );
-                })}
+                    return (
+                      <img
+                        key={index}
+                        src={displaySrc}
+                        alt={`Frame ${index + 1}`}
+                        style={{
+                          width: '100%',
+                          height: selectedTemplate.frameCount === 9 ? '60px' : '80px',
+                          objectFit: 'contain',
+                        }}
+                      />
+                    );
+                  })}
+                </div>
               </div>
 
               {/* Actions */}

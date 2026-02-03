@@ -1,5 +1,5 @@
 /**
- * Frame Selection Page - Choose frames for 4 photo slots
+ * Frame Selection Page - Choose frames for 4 or 9 photo slots
  */
 
 import { useEffect, useState } from 'react';
@@ -8,11 +8,20 @@ import { useAppStore } from '../state/store';
 import { apiService } from '../services/api';
 import { useCustomFrames } from '../hooks/useCustomFrames';
 import { FrameUploadButton } from '../components/FrameUploadButton';
-import type { SelectedFrame, Frame } from '../types';
+import type { PhotoCount } from '../types';
 
 export default function FrameSelectionPage() {
   const navigate = useNavigate();
-  const { selectedFrames, setSelectedFrame, availableFrames, setAvailableFrames, clearSelectedFrames } = useAppStore();
+  const {
+    photosPerStrip,
+    selectedFrames,
+    setSelectedFrame,
+    setPhotosPerStrip,
+    availableFrames,
+    setAvailableFrames,
+    clearSelectedFrames
+  } = useAppStore();
+
   const [showFramePicker, setShowFramePicker] = useState(false);
   const [currentSlotIndex, setCurrentSlotIndex] = useState(0);
 
@@ -26,7 +35,7 @@ export default function FrameSelectionPage() {
   } = useCustomFrames();
 
   // Combine built-in and custom frames
-  const allFrames: Frame[] = [
+  const allFrames = [
     ...availableFrames,
     ...customFrames.map(cf => ({
       id: cf.id,
@@ -58,10 +67,26 @@ export default function FrameSelectionPage() {
   }, [showFramePicker]);
 
   const allFramesSelected = selectedFrames.every((f) => f !== null);
+  const hasSelections = selectedFrames.some((f) => f !== null);
 
   const handleSlotClick = (index: number) => {
     setCurrentSlotIndex(index);
     setShowFramePicker(true);
+  };
+
+  const handleFrameCountChange = (count: PhotoCount) => {
+    if (count === photosPerStrip) return;
+
+    // Check if user has selections and warn them
+    if (hasSelections) {
+      if (!confirm(
+        `Changing to ${count} frames will clear your current frame selections.\n\nDo you want to continue?`
+      )) {
+        return;
+      }
+    }
+
+    setPhotosPerStrip(count);
   };
 
   const handleSaveTemplate = async () => {
@@ -111,6 +136,7 @@ export default function FrameSelectionPage() {
         id: `tpl_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         name: name.trim(),
         frames: frameIds,
+        frameCount: photosPerStrip,
         created: new Date().toISOString()
       };
 
@@ -138,7 +164,7 @@ export default function FrameSelectionPage() {
     }
   };
 
-  const handleFrameSelect = (frame: Frame) => {
+  const handleFrameSelect = (frame: any) => {
     setSelectedFrame(currentSlotIndex, [frame.url, frame.name]);
     setShowFramePicker(false);
   };
@@ -191,29 +217,67 @@ export default function FrameSelectionPage() {
     useAppStore.getState().setAuthenticated(false, null);
   };
 
+  // Calculate grid layout
+  const is9Frames = photosPerStrip === 9;
+  const gridCols = is9Frames ? 3 : 4;
+  const gridRows = is9Frames ? 3 : 1;
+
   return (
     <div style={{
       minHeight: '100vh',
-      background: 'var(--gradient-seashell)',
+      background: 'var(--gradient-seahell)',
       padding: 'var(--spacing-lg)',
     }}>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', marginBottom: 'var(--spacing-lg)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', marginBottom: 'var(--spacing-md)', flexWrap: 'wrap', gap: 'var(--spacing-md)' }}>
         <button onClick={handleBack} className="btn" style={{ marginRight: 'var(--spacing-md)' }}>
           ← BACK
         </button>
         <h2 style={{ color: 'var(--color-text-dark)', margin: 0 }}>CHOOSE YOUR FRAMES</h2>
       </div>
 
-      {/* Frame Slots */}
+      {/* 4/9 Frame Toggle */}
       <div style={{
         display: 'flex',
         justifyContent: 'center',
+        gap: 'var(--spacing-md)',
+        marginBottom: 'var(--spacing-xl)'
+      }}>
+        <button
+          onClick={() => handleFrameCountChange(4)}
+          className="btn"
+          style={{
+            backgroundColor: photosPerStrip === 4 ? 'var(--color-accent)' : undefined,
+            opacity: photosPerStrip === 4 ? 1 : 0.7,
+            minWidth: '150px',
+            padding: 'var(--spacing-sm) var(--spacing-md)',
+          }}
+        >
+          4 FRAMES
+        </button>
+        <button
+          onClick={() => handleFrameCountChange(9)}
+          className="btn"
+          style={{
+            backgroundColor: photosPerStrip === 9 ? 'var(--color-accent)' : undefined,
+            opacity: photosPerStrip === 9 ? 1 : 0.7,
+            minWidth: '150px',
+            padding: 'var(--spacing-sm) var(--spacing-md)',
+          }}
+        >
+          9 FRAMES
+        </button>
+      </div>
+
+      {/* Frame Slots */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: `repeat(${gridCols}, 1fr)`,
         gap: 'var(--spacing-lg)',
         marginBottom: 'var(--spacing-2xl)',
-        flexWrap: 'wrap',
+        justifyItems: 'center',
       }}>
-        {[0, 1, 2, 3].map((index) => (
+        {Array.from({ length: photosPerStrip }).map((_, index) => (
           <div
             key={index}
             onClick={() => handleSlotClick(index)}
@@ -342,35 +406,117 @@ export default function FrameSelectionPage() {
 
             <div style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
               gap: 'var(--spacing-md)',
             }}>
-              {allFrames.map((frame) => {
-                const isCustomFrame = customFrames.some(cf => cf.id === frame.id);
-
-                return (
-                  <div
-                    key={frame.id}
-                    onClick={() => handleFrameSelect(frame)}
+              {allFrames.map((frame) => (
+                <div
+                  key={frame.id}
+                  onClick={() => handleFrameSelect(frame)}
+                  style={{
+                    cursor: 'pointer',
+                    border: '2px solid #D4A574',
+                    borderRadius: 'var(--border-radius-md)',
+                    overflow: 'hidden',
+                    transition: 'transform 0.2s',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'scale(1.05)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'scale(1)';
+                  }}
+                >
+                  <img
+                    src={frame.url}
+                    alt={frame.name}
                     style={{
-                      cursor: 'pointer',
-                      padding: 'var(--spacing-sm)',
-                      backgroundColor: 'rgba(255, 255, 255, 0.6)',
-                      border: '2px solid #D4A574',
-                      borderRadius: 'var(--border-radius-sm)',
-                      textAlign: 'center',
-                      position: 'relative',
+                      width: '100%',
+                      height: '150px',
+                      objectFit: 'cover',
+                      display: 'block',
                     }}
-                  >
-                    {/* Delete button for custom frames */}
-                    {isCustomFrame && (
+                  />
+                  <p style={{
+                    margin: 0,
+                    padding: 'var(--spacing-xs)',
+                    fontSize: '14px',
+                    fontWeight: 'bold',
+                    color: 'var(--color-text-dark)',
+                    textAlign: 'center',
+                    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                  }}>
+                    {frame.name}
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            {/* Custom Frames Section with Delete Buttons */}
+            {customFrames.length > 0 && (
+              <div style={{ marginTop: 'var(--spacing-lg)' }}>
+                <h4 style={{
+                  color: 'var(--color-text-dark)',
+                  marginBottom: 'var(--spacing-md)',
+                  fontSize: '16px',
+                  fontWeight: 'bold',
+                }}>
+                  YOUR CUSTOM FRAMES
+                </h4>
+                <div style={{
+                  display: 'flex',
+                  gap: 'var(--spacing-md)',
+                  flexWrap: 'wrap',
+                  justifyContent: 'center',
+                }}>
+                  {customFrames.map((customFrame) => (
+                    <div
+                      key={customFrame.id}
+                      onClick={() => handleFrameSelect(customFrame)}
+                      style={{
+                        position: 'relative',
+                        cursor: 'pointer',
+                        border: '2px solid #D4A574',
+                        borderRadius: 'var(--border-radius-md)',
+                        overflow: 'hidden',
+                        transition: 'transform 0.2s',
+                        width: '150px',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.transform = 'scale(1.05)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.transform = 'scale(1)';
+                      }}
+                    >
+                      <img
+                        src={customFrame.dataUrl}
+                        alt={customFrame.name}
+                        style={{
+                          width: '100%',
+                          height: '120px',
+                          objectFit: 'cover',
+                          display: 'block',
+                        }}
+                      />
+                      <p style={{
+                        margin: 0,
+                        padding: 'var(--spacing-xs)',
+                        fontSize: '12px',
+                        fontWeight: 'bold',
+                        color: 'var(--color-text-dark)',
+                        textAlign: 'center',
+                        backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                      }}>
+                        {customFrame.name}
+                      </p>
                       <button
-                        onClick={(e) => handleDeleteFrame(frame.id, e)}
+                        onClick={(e) => handleDeleteFrame(customFrame.id, e)}
                         style={{
                           position: 'absolute',
-                          top: '4px',
-                          right: '4px',
-                          backgroundColor: '#ff6b6b',
+                          top: '5px',
+                          right: '5px',
+                          backgroundColor: 'rgba(255, 107, 107, 0.9)',
                           color: 'white',
                           border: 'none',
                           borderRadius: '50%',
@@ -379,7 +525,6 @@ export default function FrameSelectionPage() {
                           cursor: 'pointer',
                           fontSize: '14px',
                           fontWeight: 'bold',
-                          lineHeight: '1',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
@@ -388,45 +533,11 @@ export default function FrameSelectionPage() {
                       >
                         ×
                       </button>
-                    )}
-
-                    {/* Custom frame badge */}
-                    {isCustomFrame && (
-                      <div style={{
-                        position: 'absolute',
-                        top: '4px',
-                        left: '4px',
-                        backgroundColor: '#9b59b6',
-                        color: 'white',
-                        fontSize: '10px',
-                        padding: '2px 6px',
-                        borderRadius: '10px',
-                        fontWeight: 'bold',
-                      }}>
-                          CUSTOM
-                        </div>
-                    )}
-
-                    <img
-                      src={frame.url}
-                      alt={frame.name}
-                      style={{
-                        width: '160px',
-                        height: '160px',
-                        objectFit: 'contain',
-                      }}
-                    />
-                    <p style={{
-                      color: 'var(--color-text-dark)',
-                      marginTop: 'var(--spacing-xs)',
-                      fontSize: 'var(--font-size-sm)',
-                    }}>
-                      {frame.name}
-                    </p>
-                  </div>
-                );
-              })}
-            </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <button
               onClick={() => setShowFramePicker(false)}
@@ -434,6 +545,8 @@ export default function FrameSelectionPage() {
               style={{
                 marginTop: 'var(--spacing-lg)',
                 width: '100%',
+                backgroundColor: '#E3F2FD',
+                color: 'var(--color-text-dark)'
               }}
             >
               CANCEL

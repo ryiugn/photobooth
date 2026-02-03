@@ -9,7 +9,7 @@ import { apiService } from '../services/api';
 
 export default function PhotostripRevealPage() {
   const navigate = useNavigate();
-  const { capturedPhotos, selectedFrames, finalPhotostrip, setFinalPhotostrip, resetCapture } = useAppStore();
+  const { capturedPhotos, selectedFrames, finalPhotostrip, setFinalPhotostrip, resetCapture, photosPerStrip } = useAppStore();
   const [isComposing, setIsComposing] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
@@ -21,27 +21,45 @@ export default function PhotostripRevealPage() {
       try {
         console.log('[Composition] Composing photostrip from', capturedPhotos.length, 'photos (client-side)');
 
-        if (capturedPhotos.length !== 4) {
-          throw new Error(`Expected 4 photos, got ${capturedPhotos.length}`);
+        const photoCount = capturedPhotos.length;
+        if (photoCount !== 4 && photoCount !== 9) {
+          throw new Error(`Expected 4 or 9 photos, got ${photoCount}`);
         }
 
         // Client-side composition: load images and compose on canvas
-        const STRIP_WIDTH = 640;
+        const STRIP_WIDTH = photoCount === 9 ? 900 : 640;
         const PHOTO_HEIGHT = 480;
         const SPACING = 20;
-        const stripHeight = (PHOTO_HEIGHT * 4) + (SPACING * 5);
+
+        // Calculate dimensions based on photo count
+        let canvasWidth: number;
+        let canvasHeight: number;
+        const gridCols = photoCount === 9 ? 3 : 2;
+        const gridRows = photoCount === 9 ? 3 : 2;
+
+        if (photoCount === 9) {
+          // 3x3 grid layout for 9 frames
+          const photoWidth = (STRIP_WIDTH - (SPACING * (gridCols + 1))) / gridCols;
+          canvasWidth = STRIP_WIDTH;
+          canvasHeight = (photoWidth * gridRows) + (SPACING * (gridRows + 1));
+        } else {
+          // 2x2 grid layout for 4 frames
+          const photoWidth = (STRIP_WIDTH - (SPACING * (gridCols + 1))) / gridCols;
+          canvasWidth = STRIP_WIDTH;
+          canvasHeight = (photoWidth * gridRows) + (SPACING * (gridRows + 1));
+        }
 
         const canvas = document.createElement('canvas');
-        canvas.width = STRIP_WIDTH;
-        canvas.height = stripHeight;
+        canvas.width = canvasWidth;
+        canvas.height = canvasHeight;
         const ctx = canvas.getContext('2d');
         if (!ctx) throw new Error('Failed to get canvas context');
 
         // White background
         ctx.fillStyle = '#FFFFFF';
-        ctx.fillRect(0, 0, STRIP_WIDTH, stripHeight);
+        ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 
-        // Load all photos and draw them
+        // Load all photos
         const loadImage = (src: string): Promise<HTMLImageElement> => {
           return new Promise((resolve, reject) => {
             const img = new Image();
@@ -53,10 +71,16 @@ export default function PhotostripRevealPage() {
 
         const photos = await Promise.all(capturedPhotos.map(loadImage));
 
-        // Draw each photo vertically
+        // Draw photos in grid layout
+        const photoWidth = (canvasWidth - (SPACING * (gridCols + 1))) / gridCols;
+        const photoHeight = photoCount === 9 ? photoWidth : (canvasHeight - (SPACING * (gridRows + 1))) / gridRows;
+
         photos.forEach((photo, index) => {
-          const y = SPACING + (PHOTO_HEIGHT + SPACING) * index;
-          ctx.drawImage(photo, 0, y, STRIP_WIDTH, PHOTO_HEIGHT);
+          const col = index % gridCols;
+          const row = Math.floor(index / gridCols);
+          const x = SPACING + (photoWidth + SPACING) * col;
+          const y = SPACING + (photoHeight + SPACING) * row;
+          ctx.drawImage(photo, x, y, photoWidth, photoHeight);
         });
 
         // Convert to data URL
@@ -75,12 +99,13 @@ export default function PhotostripRevealPage() {
       }
     };
 
-    if (capturedPhotos.length === 4 && !finalPhotostrip) {
+    const expectedCount = photosPerStrip;
+    if (capturedPhotos.length === expectedCount && !finalPhotostrip) {
       composeStrip();
     } else {
       setIsComposing(false);
     }
-  }, [capturedPhotos, finalPhotostrip, setFinalPhotostrip]);
+  }, [capturedPhotos, finalPhotostrip, setFinalPhotostrip, photosPerStrip]);
 
   // Upload photostrip to cloud (async, non-blocking)
   const uploadToCloud = async (dataUrl: string) => {

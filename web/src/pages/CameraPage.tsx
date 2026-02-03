@@ -10,11 +10,15 @@ import { apiService } from '../services/api';
 export default function CameraPage() {
   const navigate = useNavigate();
   const {
+    photosPerStrip,
     selectedFrames,
     capturedPhotos,
     currentPhotoIndex,
     addCapturedPhoto,
     resetCapture,
+    currentExposure,
+    setCurrentExposure,
+    resetExposures,
   } = useAppStore();
 
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -192,6 +196,10 @@ export default function CameraPage() {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
+    // Apply exposure filter if set (using filter property on context)
+    const exposureFilter = `brightness(${2 ** currentExposure})`;
+    ctx.filter = exposureFilter;
+
     // Mirror horizontally to match the preview (transform: scaleX(-1))
     ctx.translate(displayedWidth, 0);
     ctx.scale(-1, 1);
@@ -233,9 +241,7 @@ export default function CameraPage() {
       }
 
       // Draw frame with transparency
-      ctx.globalAlpha = 0.8;
       ctx.drawImage(frameImg, drawX, drawY, drawWidth, drawHeight);
-      ctx.globalAlpha = 1.0;
 
       // Convert to data URL for preview (instant, no API call)
       const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
@@ -261,10 +267,11 @@ export default function CameraPage() {
   const handleKeep = () => {
     console.log('[Camera] handleKeep called, currentPhotoIndex:', currentPhotoIndex, 'countdown:', countdown);
     if (previewImage) {
-      addCapturedPhoto(previewImage);
+      // Store photo with its exposure value
+      addCapturedPhoto(previewImage, currentExposure);
 
       // Check if all photos captured
-      if (currentPhotoIndex + 1 >= 4) {
+      if (currentPhotoIndex + 1 >= photosPerStrip) {
         console.log('[Camera] All photos captured, navigating to reveal');
         // Navigate to composition
         navigate('/reveal');
@@ -275,6 +282,8 @@ export default function CameraPage() {
         setPreviewImage(null);
         // Reset countdown to re-enable the CAPTURE button
         setCountdown(null);
+        // Reset exposure slider for next photo
+        setCurrentExposure(0);
         // Restart video playback after video element re-appears
         setTimeout(() => {
           if (videoRef.current) {
@@ -292,6 +301,8 @@ export default function CameraPage() {
     setPreviewImage(null);
     // Reset countdown to re-enable the CAPTURE button
     setCountdown(null);
+    // Reset exposure slider for retake
+    setCurrentExposure(0);
     // Restart video playback after video element re-appears
     setTimeout(() => {
       if (videoRef.current) {
@@ -343,10 +354,17 @@ export default function CameraPage() {
 
           console.log('[Capture] Blank photo with frame created successfully');
           // Add directly to captured photos (don't show preview)
-          addCapturedPhoto(response.framed_photo);
+          addCapturedPhoto(response.framed_photo, currentExposure);
 
           // Check if all photos captured
-          if (currentPhotoIndex + 1 >= 4) {
+          if (currentPhotoIndex + 1 >= photosPerStrip) {
+            console.log('[Camera] All photos captured, navigating to reveal');
+            // Navigate to composition
+            navigate('/reveal');
+          } else {
+            // Reset exposure for next photo
+            setCurrentExposure(0);
+          }
             console.log('[Camera] All photos captured, navigating to reveal');
             // Navigate to composition
             navigate('/reveal');
@@ -406,6 +424,7 @@ export default function CameraPage() {
       mediaStreamRef.current = null;
     }
     resetCapture();
+    resetExposures();
     navigate('/frames');
   };
 
@@ -426,7 +445,7 @@ export default function CameraPage() {
         <button onClick={handleBack} className="btn" style={{ marginRight: 'var(--spacing-md)' }}>
           ← BACK
         </button>
-        <h2 style={{ margin: 0 }}>Photo {currentPhotoIndex + 1} of 4</h2>
+        <h2 style={{ margin: 0 }}>Photo {currentPhotoIndex + 1} of {photosPerStrip}</h2>
       </div>
 
       {/* Camera/Preview Container */}
@@ -484,6 +503,7 @@ export default function CameraPage() {
                 height: '100%',
                 objectFit: 'cover',
                 transform: 'scaleX(-1)', // Mirror the video horizontally
+                filter: `brightness(${2 ** currentExposure})`, // Apply exposure adjustment
               }}
             />
             {/* Frame overlay */}
@@ -499,7 +519,7 @@ export default function CameraPage() {
                   height: '100%',
                   pointerEvents: 'none',
                   objectFit: 'cover', // Use 'cover' to match backend composition logic
-                  opacity: 0.8,
+                  opacity: 1,
                 }}
               />
             )}
@@ -528,6 +548,44 @@ export default function CameraPage() {
 
       {/* Hidden canvas for capture */}
       <canvas ref={canvasRef} style={{ display: 'none' }} />
+
+      {/* Exposure adjustment slider */}
+      {!showPreview && (
+        <div style={{
+          width: '100%',
+          maxWidth: '500px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 'var(--spacing-md)',
+          marginBottom: 'var(--spacing-lg)',
+        }}>
+          <span style={{ fontSize: 'var(--font-size-md)', fontWeight: 'bold', minWidth: '80px' }}>
+            Exposure:
+          </span>
+          <input
+            type="range"
+            min="-20"
+            max="20"
+            value={currentExposure * 10}
+            onChange={(e) => setCurrentExposure(Number(e.target.value) / 10)}
+            style={{
+              flex: 1,
+              height: '8px',
+              borderRadius: '4px',
+              background: `linear-gradient(to right, #888 0%, ${currentExposure === 0 ? '#fff' : currentExposure > 0 ? '#ddd' : '#ccc'} 50%, #888 100%)`,
+              cursor: 'pointer',
+            }}
+          />
+          <span style={{
+            fontSize: 'var(--font-size-md)',
+            fontWeight: 'bold',
+            minWidth: '50px',
+            textAlign: 'center',
+          }}>
+            {currentExposure > 0 ? '+' : ''}{currentExposure.toFixed(1)}
+          </span>
+        </div>
+      )}
 
       {/* Hidden file input for upload fallback */}
       <input

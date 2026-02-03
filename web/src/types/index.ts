@@ -32,17 +32,26 @@ export interface DisplayFrame {
 
 export type SelectedFrame = [string, string] | null; // [path, name] tuple or null
 
+// Photo count type
+export type PhotoCount = 4 | 9;
+
 // Template types
 export interface Template {
   id: string;
   name: string;
-  frames: string[]; // Array of 4 frame paths
+  frames: string[]; // Array of 4 or 9 frame paths
+  frameCount: PhotoCount; // 4 or 9
   created: string;
 }
 
 export interface TemplateCreateRequest {
   name: string;
   frames: string[];
+}
+
+export interface TemplateCategory {
+  value: 'all' | '4' | '9';
+  label: string;
 }
 
 // Authentication types
@@ -53,7 +62,7 @@ export interface LoginRequest {
 export interface LoginResponse {
   access_token: string;
   token_type: string;
-  expires_in: number;
+  expires_in: string;
 }
 
 export interface AuthState {
@@ -70,7 +79,8 @@ export interface CaptureResponse {
 }
 
 export interface ComposeRequest {
-  photos: string[]; // Array of 4 base64-encoded framed photos
+  photos: string[]; // Array of 4 or 9 base64-encoded framed photos
+  exposureValues?: number[]; // Exposure adjustment for each photo [-2.0, +2.0]
 }
 
 export interface ComposeResponse {
@@ -94,12 +104,15 @@ export interface AppState {
   sessionId: string | null;
 
   // Frame selection
-  selectedFrames: SelectedFrame[]; // Array of 4 selected frames (or null)
+  photosPerStrip: PhotoCount; // 4 or 9 frames
+  selectedFrames: SelectedFrame[]; // Array of selected frames (length 4 or 9)
 
   // Capture session
   capturedPhotos: string[]; // Base64 framed photos
   currentPhotoIndex: number;
   finalPhotostrip: string | null;
+  exposureValues: number[]; // Exposure value for each captured photo [-2.0, +2.0]
+  currentExposure: number; // Current exposure slider value for next photo
 
   // Templates
   templates: Template[];
