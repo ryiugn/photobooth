@@ -20,9 +20,8 @@ router = APIRouter()
 # Request/Response Models
 class ComposeRequest(BaseModel):
     """Request to compose photostrip from already-framed photos."""
-    photos: List[str]  # List of 4 or 9 base64-encoded framed photos
+    photos: List[str]  # List of 4 or 9 base64-encoded framed photos (exposure already applied)
     frame_ids: List[str] | None = None  # Optional, not used (photos already framed)
-    exposure_values: List[float] | None = None  # Exposure values for each photo [-2.0, +2.0]
 
 
 class ComposeResponse(BaseModel):
@@ -295,14 +294,14 @@ async def compose_photostrip(
     user: dict = Depends(get_current_user)
 ):
     """
-    Compose 4 or 9 already-framed photos into an A6 photostrip with black borders.
+    Compose 4 or 9 already-framed photos into an A6 photostrip with white borders.
 
     Note: Photos are already framed by the capture endpoint.
-    This endpoint stitches them together with optional exposure adjustments.
+    Exposure adjustments are applied during capture, not during composition.
+    This endpoint only stitches the already-framed photos together.
 
     Args:
         request: Composition request with 4 or 9 base64-encoded framed photos
-                 and optional exposure values
 
     Returns:
         ComposeResponse with photostrip as base64
@@ -318,19 +317,11 @@ async def compose_photostrip(
             detail=f"Must provide exactly 4 or 9 photos, got {photo_count}"
         )
 
-    # Initialize exposure values if not provided
-    exposure_values = request.exposure_values if request.exposure_values else [0.0] * photo_count
-    if len(exposure_values) != photo_count:
-        exposure_values = (exposure_values + [0.0] * photo_count)[:photo_count]
-
-    # Convert base64 photos to bytes and apply exposure
+    # Convert base64 photos to bytes
     try:
         photo_bytes_list = []
-        for i, photo in enumerate(request.photos):
+        for photo in request.photos:
             photo_bytes = base64_to_bytes(photo)
-            # Apply exposure if not zero
-            if exposure_values[i] != 0.0:
-                photo_bytes = apply_exposure_to_image(photo_bytes, exposure_values[i])
             photo_bytes_list.append(photo_bytes)
     except Exception as e:
         raise HTTPException(
@@ -359,10 +350,12 @@ async def compose_photostrip(
 
 async def stitch_photostrip_from_bytes(photo_bytes_list: List[bytes], gap: int = 10) -> bytes:
     """
-    Stitch already-framed photos into an A6 photostrip with black borders.
+    Stitch already-framed photos into a photostrip with white borders.
 
     For 4 photos: vertical strip (1 column × 4 rows)
     For 9 photos: 3×3 grid
+
+    The canvas is sized to fit the photos exactly with borders, no extra whitespace.
 
     Args:
         photo_bytes_list: List of 4 or 9 framed photos as bytes
@@ -377,9 +370,6 @@ async def stitch_photostrip_from_bytes(photo_bytes_list: List[bytes], gap: int =
     if photo_count not in (4, 9):
         raise ValueError(f"Must have exactly 4 or 9 photos, got {photo_count}")
 
-    # A6 dimensions at 150 DPI
-    target_width = 1240
-    target_height = 1748
     border_width = gap
 
     # Determine grid layout
@@ -399,29 +389,45 @@ async def stitch_photostrip_from_bytes(photo_bytes_list: List[bytes], gap: int =
             photo_pil = photo_pil.convert('RGB')
         framed_photos.append(photo_pil)
 
-    # Calculate photo dimensions to fit A6 with borders
-    # Available space = total size - (border_width * (grid_dim + 1))
-    available_width = target_width - (border_width * (grid_cols + 1))
-    available_height = target_height - (border_width * (grid_rows + 1))
+    # Use the first photo as reference for aspect ratio (all photos are from same camera)
+    reference_photo = framed_photos[0]
+    original_width, original_height = reference_photo.size
+    aspect_ratio = original_width / original_height
 
-    photo_width = available_width // grid_cols
-    photo_height = available_height // grid_rows
+    # For 4 photos (1x4 vertical strip): reasonable photo size based on typical camera resolution
+    # For 9 photos (3x3 grid): reasonable photo size
+    # These are baseline sizes - the canvas will be sized to fit exactly
+    if photo_count == 4:
+        # Vertical strip: use a height that produces good quality, width follows aspect ratio
+        base_photo_height = 600
+        photo_height = base_photo_height
+        photo_width = int(photo_height * aspect_ratio)
+    else:
+        # 3x3 grid: use a width that produces good quality
+        base_photo_width = 500
+        photo_width = base_photo_width
+        photo_height = int(photo_width / aspect_ratio)
 
-    # Resize all photos to calculated dimensions
+    # Resize all photos to calculated dimensions (preserves aspect ratio)
     resized_photos = []
     for framed_photo in framed_photos:
         resized = framed_photo.resize((photo_width, photo_height), Image.Resampling.LANCZOS)
         resized_photos.append(resized)
 
-    # Create A6 canvas with black background (creates outer borders)
-    photostrip = Image.new("RGB", (target_width, target_height), color=(0, 0, 0))
+    # Calculate exact canvas dimensions needed (no extra whitespace)
+    # Canvas size = photo dimensions + borders on all sides
+    canvas_width = (photo_width * grid_cols) + (border_width * (grid_cols + 1))
+    canvas_height = (photo_height * grid_rows) + (border_width * (grid_rows + 1))
+
+    # Create canvas to fit photos exactly with white background
+    photostrip = Image.new("RGB", (canvas_width, canvas_height), color=(255, 255, 255))
 
     # Paste each photo in grid layout with borders
     for index, resized_photo in enumerate(resized_photos):
         col = index % grid_cols
         row = index // grid_cols
 
-        # Calculate position with border offset
+        # Calculate position with border on all sides
         x = border_width + (col * (photo_width + border_width))
         y = border_width + (row * (photo_height + border_width))
 
