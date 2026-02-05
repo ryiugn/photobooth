@@ -13,6 +13,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import os
 
+# Import settings
+from config import settings
+
 # Create FastAPI app
 app = FastAPI(
     title="Photobooth API",
@@ -21,12 +24,17 @@ app = FastAPI(
 )
 
 # CORS configuration for Vercel deployment
-FRONTEND_URL = os.getenv("FRONTEND_URL", "https://your-domain.vercel.app")
-ALLOWED_ORIGINS = [
-    "http://localhost:3000",
-    "http://localhost:5173",  # Vite dev server
-    FRONTEND_URL,
+# Add production web deployment URLs to allowed origins
+PRODUCTION_WEB_URLS = [
+    "https://web-ryiugns-projects.vercel.app",
+    "https://web-909ax5xr8-ryiugns-projects.vercel.app",
 ]
+
+# Combine local origins with settings and production URLs
+ALLOWED_ORIGINS = list(settings.ALLOWED_ORIGINS)  # Start with config settings
+for url in PRODUCTION_WEB_URLS:
+    if url not in ALLOWED_ORIGINS:
+        ALLOWED_ORIGINS.append(url)
 
 # Log CORS configuration for debugging
 import logging
