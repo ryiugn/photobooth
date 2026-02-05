@@ -26,8 +26,11 @@ app = FastAPI(
 # CORS configuration for Vercel deployment
 # Add production web deployment URLs to allowed origins
 PRODUCTION_WEB_URLS = [
+    "https://ryiugn-photobooth.vercel.app",
     "https://web-ryiugns-projects.vercel.app",
     "https://web-909ax5xr8-ryiugns-projects.vercel.app",
+    "https://web-8zunao3z5-ryiugns-projects.vercel.app",
+    "https://web-sandy-xi-35.vercel.app",
 ]
 
 # Combine local origins with settings and production URLs
