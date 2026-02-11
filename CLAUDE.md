@@ -166,6 +166,49 @@ This is a photobooth project that implements a **4-page secure camera applicatio
 - **json**: Configuration and credentials storage
 - **logging**: Authentication attempt logging
 
+## Frame Storage
+
+Custom frames are stored using IndexedDB with the following specifications:
+- **Database name:** `PhotoboothFramesDB`
+- **Store name:** `customFrames`
+- **Storage capacity:** ~100MB per browser origin
+- **Fallback:** localStorage for unsupported browsers
+- **Migration:** Automatic migration from localStorage to IndexedDB on first load
+
+### Storage Limits
+
+| Browser | IndexedDB Limit | Fallback |
+|---------|----------------|----------|
+| Chrome/Edge | ~100-500MB | localStorage (~10MB) |
+| Firefox | ~100-500MB | localStorage (~5MB) |
+| Safari | ~100-500MB | localStorage (~5MB) |
+
+### Frame Specifications
+
+- **Allowed formats:** PNG, JPEG, WebP, SVG
+- **Max file size:** 5MB per frame
+- **Resolution:** Up to 1920px (maintains original quality)
+- **Quality:** No compression applied
+
+### Storage Implementation
+
+The web application uses IndexedDB via `web/src/utils/indexedDBStorage.ts`:
+- **init()**: Initialize the database
+- **getAllFrames()**: Retrieve all stored frames
+- **addFrame()**: Add a new frame (uses `put()` for duplicate handling)
+- **deleteFrame()**: Remove a frame by ID
+- **getStorageUsage()**: Get current usage statistics
+- **migrateFromLocalStorage()**: One-time migration from localStorage
+- **resetStorage()**: Clear all data (for debugging)
+
+### Error Handling
+
+Storage errors are handled via `web/src/utils/storageErrors.ts`:
+- `StorageError`: Custom error class with error codes
+- `getStorageErrorMessage()`: User-friendly error messages
+- `isIndexedDBAvailable()`: Browser support check
+- `logStorageDiagnostics()`: Debug logging utility
+
 ## Hardware Requirements
 
 - Raspberry Pi with camera module OR USB webcam

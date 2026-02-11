@@ -1,28 +1,16 @@
 /**
  * React hook for managing custom frame uploads and storage
- * Handles frame validation, processing, localStorage persistence, and storage quota management
+ * Handles frame validation, processing, IndexedDB persistence, and storage quota management
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { CustomFrame } from '../types';
 import {
   validateImageFile,
-  processImageFile,
-  isStorageQuotaExceeded,
-  getStorageUsage as getImageStorageUsage
+  processImageFile
+  // REMOVED: isStorageQuotaExceeded, getStorageUsage as getImageStorageUsage
 } from '../utils/imageProcessor';
-
-/**
- * Storage key for custom frames in localStorage
- */
-const STORAGE_KEY = 'photobooth_custom_frames';
-
-/**
- * Format bytes to megabytes with 2 decimal places
- */
-function formatMB(bytes: number): string {
-  return (bytes / (1024 * 1024)).toFixed(2);
-}
+import { indexedDBStorage } from '../utils/indexedDBStorage';
 
 /**
  * Result object from getStorageUsage with formatted strings
@@ -31,6 +19,13 @@ export interface StorageUsageInfo {
   used: string;      // Formatted as "X.XX MB"
   total: string;     // Formatted as "X.XX MB"
   percentage: string; // Formatted as "X.XX %"
+}
+
+/**
+ * Format bytes to megabytes with 2 decimal places
+ */
+function formatMB(bytes: number): string {
+  return (bytes / (1024 * 1024)).toFixed(2);
 }
 
 /**
@@ -47,15 +42,15 @@ export interface UseCustomFramesReturn {
   addCustomFrame: (file: File, name: string) => Promise<CustomFrame>;
   /** Delete a custom frame by ID */
   deleteCustomFrame: (id: string) => void;
-  /** Get current storage usage information */
-  getStorageUsage: () => StorageUsageInfo;
+  /** Get current storage usage information (async) */
+  getStorageUsage: () => Promise<StorageUsageInfo>;
 }
 
 /**
  * React hook for managing custom frame state
  *
  * Provides functionality to:
- * - Load frames from localStorage on mount
+ * - Load frames from IndexedDB on mount and run migration
  * - Add new custom frames with validation and processing
  * - Delete existing frames
  * - Track upload progress
@@ -80,8 +75,8 @@ export interface UseCustomFramesReturn {
  * // Delete a frame
  * deleteCustomFrame(frameId);
  *
- * // Check storage
- * const { used, total, percentage } = getStorageUsage();
+ * // Check storage (now async)
+ * const { used, total, percentage } = await getStorageUsage();
  * ```
  */
 export function useCustomFrames(): UseCustomFramesReturn {
@@ -90,38 +85,45 @@ export function useCustomFrames(): UseCustomFramesReturn {
   const [uploadProgress, setUploadProgress] = useState(0);
 
   /**
-   * Load frames from localStorage on mount
+   * Format bytes to megabytes with 2 decimal places
    */
-  useEffect(() => {
-    try {
-      const storedData = localStorage.getItem(STORAGE_KEY);
-      if (storedData) {
-        const parsed: CustomFrame[] = JSON.parse(storedData);
-        // Sort by creation date (newest first)
-        const sorted = parsed.sort(
-          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-        );
-        setCustomFrames(sorted);
-      }
-    } catch (error) {
-      console.error('Failed to load custom frames from localStorage:', error);
-    } finally {
-      setIsLoading(false);
-    }
+  const formatMB = useCallback((bytes: number): string => {
+    return (bytes / (1024 * 1024)).toFixed(2);
   }, []);
 
   /**
-   * Save frames to localStorage whenever they change
+   * Load frames from IndexedDB on mount and run migration
    */
   useEffect(() => {
-    if (!isLoading) {
+    const loadFrames = async () => {
       try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(customFrames));
+        // Initialize IndexedDB and run migration
+        await indexedDBStorage.init();
+
+        // Run migration from localStorage
+        const migrationResult = await indexedDBStorage.migrateFromLocalStorage();
+        if (migrationResult.data && migrationResult.data.migrated > 0) {
+          console.log(`Migrated ${migrationResult.data.migrated} frames from localStorage`);
+        }
+
+        // Load all frames
+        const result = await indexedDBStorage.getAllFrames();
+        if (result.success && result.data) {
+          // Sort by creation date (newest first)
+          const sorted = result.data.sort(
+            (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          );
+          setCustomFrames(sorted);
+        }
       } catch (error) {
-        console.error('Failed to save custom frames to localStorage:', error);
+        console.error('Failed to load custom frames:', error);
+      } finally {
+        setIsLoading(false);
       }
-    }
-  }, [customFrames, isLoading]);
+    };
+
+    loadFrames();
+  }, []);
 
   /**
    * Add a new custom frame
@@ -143,7 +145,8 @@ export function useCustomFrames(): UseCustomFramesReturn {
     }
 
     // Check storage quota
-    if (isStorageQuotaExceeded()) {
+    const usage = await indexedDBStorage.getStorageUsage();
+    if (usage.percentage >= 90) {
       setUploadProgress(0);
       throw new Error('Storage quota exceeded. Please delete some frames to make space.');
     }
@@ -165,7 +168,14 @@ export function useCustomFrames(): UseCustomFramesReturn {
       source: 'user-upload'
     };
 
-    // Add to state (will be auto-sorted by creation date)
+    // Save to IndexedDB
+    const result = await indexedDBStorage.addFrame(newFrame);
+    if (!result.success) {
+      setUploadProgress(0);
+      throw new Error(result.error || 'Failed to save frame');
+    }
+
+    // Update state
     setCustomFrames((prev) => {
       const updated = [...prev, newFrame];
       return updated.sort(
@@ -188,32 +198,37 @@ export function useCustomFrames(): UseCustomFramesReturn {
    *
    * @param id - The ID of the frame to delete
    */
-  const deleteCustomFrame = (id: string): void => {
-    setCustomFrames((prev) => prev.filter((frame) => frame.id !== id));
+  const deleteCustomFrame = async (id: string): Promise<void> => {
+    const result = await indexedDBStorage.deleteFrame(id);
+    if (result.success) {
+      setCustomFrames((prev) => prev.filter((frame) => frame.id !== id));
+    } else {
+      console.error('Failed to delete frame:', result.error);
+    }
   };
 
   /**
    * Get current storage usage information
    *
-   * Calculates the current localStorage usage and returns formatted strings
+   * Calculates the current IndexedDB usage and returns formatted strings
    *
    * @returns StorageUsageInfo with used, total, and percentage as formatted strings
    *
    * @example
    * ```tsx
-   * const { used, total, percentage } = getStorageUsage();
+   * const { used, total, percentage } = await getStorageUsage();
    * console.log(`Used: ${used} of ${total} (${percentage})`);
-   * // Output: "Used: 2.45 MB of 5.00 MB (49.00 %)"
+   * // Output: "Used: 2.45 MB of 100.00 MB (2.45 %)"
    * ```
    */
-  const getStorageUsage = (): StorageUsageInfo => {
-    const usage = getImageStorageUsage();
+  const getStorageUsage = useCallback(async (): Promise<StorageUsageInfo> => {
+    const usage = await indexedDBStorage.getStorageUsage();
     return {
       used: `${formatMB(usage.used)} MB`,
       total: `${formatMB(usage.total)} MB`,
-      percentage: `${usage.percentage} %`
+      percentage: `${usage.percentage.toFixed(2)} %`
     };
-  };
+  }, [formatMB]);
 
   return {
     customFrames,

@@ -33,9 +33,11 @@ const ALLOWED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/svg
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 
 /**
- * Storage quota for custom frames (5MB)
+ * Increased quota for IndexedDB (100MB)
+ * Note: This constant is now used for display purposes only
+ * Actual storage is handled by IndexedDB which has much larger limits
  */
-const STORAGE_QUOTA = 5 * 1024 * 1024;
+const STORAGE_QUOTA = 100 * 1024 * 1024;
 
 /**
  * Storage key for custom frames
@@ -73,7 +75,7 @@ export function validateImageFile(file: File): ValidationResult {
     };
   }
 
-  // Warning for large files
+  // Warning at 80% of max file size
   if (file.size > MAX_FILE_SIZE * 0.8) {
     const sizeMB = (file.size / (1024 * 1024)).toFixed(2);
     return {
@@ -177,39 +179,27 @@ export function processImageFile(file: File, maxSize: number = 1920): Promise<Pr
 /**
  * Calculates the current storage usage for custom frames
  * @returns Object with used bytes, total quota, and percentage used
+ * @deprecated This function is deprecated. Use indexedDBStorage.getStorageUsage() instead.
+ * This function is kept for backward compatibility but always returns zero usage.
+ * Custom frames are now stored in IndexedDB, not localStorage.
  */
 export function getStorageUsage(): { used: number; total: number; percentage: number } {
-  try {
-    const storedData = localStorage.getItem(STORAGE_KEY);
-    let used = 0;
-
-    if (storedData) {
-      // Calculate size of stored data string (UTF-16 uses 2 bytes per character)
-      used = storedData.length * 2;
-    }
-
-    const percentage = (used / STORAGE_QUOTA) * 100;
-
-    return {
-      used,
-      total: STORAGE_QUOTA,
-      percentage: Math.round(percentage * 100) / 100 // Round to 2 decimal places
-    };
-  } catch (error) {
-    // If localStorage is not accessible, return zero usage
-    return {
-      used: 0,
-      total: STORAGE_QUOTA,
-      percentage: 0
-    };
-  }
+  // Return zero usage since frames are now in IndexedDB
+  console.warn('[imageProcessor] getStorageUsage() is deprecated. Use indexedDBStorage.getStorageUsage() instead.');
+  return {
+    used: 0,
+    total: STORAGE_QUOTA,
+    percentage: 0
+  };
 }
 
 /**
  * Checks if the storage quota is approaching or exceeded
- * @returns true if storage usage is >= 95% of quota
+ * @returns true if storage usage is >= 90% of quota
+ * @deprecated This function is deprecated. Storage quota is now handled by IndexedDB.
+ * Always returns false (quota not exceeded).
  */
 export function isStorageQuotaExceeded(): boolean {
-  const usage = getStorageUsage();
-  return usage.percentage >= 95;
+  console.warn('[imageProcessor] isStorageQuotaExceeded() is deprecated. Quota is handled by IndexedDB.');
+  return false;
 }

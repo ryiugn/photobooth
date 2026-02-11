@@ -105,6 +105,67 @@ export default function CameraPage() {
     }
   }, [showPreview]);
 
+  /**
+   * Preload frames to ensure fast capture
+   * Loads all selected frames into browser cache before capture starts
+   */
+  useEffect(() => {
+    const preloadFrames = async () => {
+      const frameUrls = selectedFrames
+        .map((f) => f?.[0])
+        .filter((url): url is string => !!url);
+
+      if (frameUrls.length === 0) {
+        return;
+      }
+
+      console.log('[Camera] Preloading frames:', frameUrls);
+
+      // Create abort controller for cleanup
+      const abortController = new AbortController();
+      const signal = abortController.signal;
+
+      // Preload each frame
+      const loadPromises = frameUrls.map((url) => {
+        return new Promise<void>((resolve) => {
+          // Check if aborted
+          if (signal.aborted) {
+            resolve();
+            return;
+          }
+
+          const img = new Image();
+
+          const cleanup = () => {
+            img.onload = null;
+            img.onerror = null;
+          };
+
+          img.onload = () => {
+            console.log('[Camera] Preloaded frame:', url);
+            cleanup();
+            resolve();
+          };
+
+          img.onerror = () => {
+            console.warn('[Camera] Failed to preload frame:', url);
+            cleanup();
+            resolve(); // Resolve anyway to not block
+          };
+
+          img.src = url;
+        });
+      });
+
+      await Promise.all(loadPromises);
+      console.log('[Camera] All frames preloaded');
+    };
+
+    if (selectedFrames.some((f) => f !== null)) {
+      preloadFrames();
+    }
+  }, [selectedFrames]); // This is correct - reload when frames change
+
   const handleCapture = async () => {
     console.log('[Camera] handleCapture called, cameraReady:', cameraReady, 'videoRef:', !!videoRef.current);
     if (!videoRef.current) {
@@ -207,8 +268,9 @@ export default function CameraPage() {
     // Draw only the cropped region that matches what the user sees in preview
     ctx.drawImage(video, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, displayedWidth, displayedHeight);
 
-    // Reset transform before drawing frame
+    // Reset transform and filter before drawing frame (exposure should only affect photo, not frame)
     ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.filter = 'none';
 
     // Get current frame URL
     const currentFrameUrl = selectedFrames[currentPhotoIndex]?.[0];
